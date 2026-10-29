@@ -1,6 +1,16 @@
+#include <stdint.h>
+
+#define REG_LEDS 		(*(volatile uint32_t*)0x10000000)
+#define REG_UART_CLKDIV (*(volatile uint32_t*)0x20000004)
+#define REG_UART_DATA 	(*(volatile uint32_t*)0x20000008)
+
 void putc(char c)
 {
-	*(volatile char*)0x10000000 = c;
+    if (c == '\n') {
+        REG_UART_DATA = '\r';
+    }
+    // Hardware automatically stalls CPU via mem_ready until TX buffer accepts byte
+    REG_UART_DATA = c;
 }
 
 void puts(const char *s)
@@ -17,27 +27,36 @@ void *memcpy(void *dest, const void *src, int n)
 	return dest;
 }
 
-void main()
+// Simple delay loop
+void delay(volatile uint32_t count)
 {
-	char message[] = "$Uryyb+Jbeyq!+Vs+lbh+pna+ernq+guvf+zrffntr+gura$gur+CvpbEI32+PCH"
-			"+frrzf+gb+or+jbexvat+whfg+svar.$$++++++++++++++++GRFG+CNFFRQ!$$";
-	for (int i = 0; message[i]; i++)
-		switch (message[i])
-		{
-		case 'a' ... 'm':
-		case 'A' ... 'M':
-			message[i] += 13;
-			break;
-		case 'n' ... 'z':
-		case 'N' ... 'Z':
-			message[i] -= 13;
-			break;
-		case '$':
-			message[i] = '\n';
-			break;
-		case '+':
-			message[i] = ' ';
-			break;
-		}
-	puts(message);
+    while (count--) {
+        __asm__ volatile("");
+    }
+}
+
+void main(void)
+{
+    // Set UART baud rate: 100 MHz / 115200 baud = 868
+    REG_UART_CLKDIV = 868;
+    puts("\r\n");
+    puts("==================================================\r\n");
+    puts("  PicoRV32 RV32I Running on Digilent Nexys A7-100T\r\n");
+    puts("==================================================\r\n");
+    puts("CPU started successfully. Running LED counter...\r\n\r\n");
+    uint32_t counter = 0;
+    while (1) {
+        // Output bottom 15 bits to the 15 user LEDs
+        REG_LEDS = counter & 0x7FFF;
+        // Print a periodic heartbeat over serial every 16 iterations
+        if ((counter & 0x0F) == 0) {
+            puts("[PicoRV32 Heartbeat] Counter = ");
+            // Print simple hex digit
+            char hex_char = "0123456789ABCDEF"[(counter >> 4) & 0x0F];
+            putc(hex_char);
+            puts("\r\n");
+        }
+        counter++;
+        delay(250000); // Visual delay on real FPGA (~250ms at 100MHz)
+    }
 }

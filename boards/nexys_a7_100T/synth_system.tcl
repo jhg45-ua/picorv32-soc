@@ -1,17 +1,20 @@
+# Read Verilog RTL sources
+read_verilog rtl/cores/picorv32.v
+read_verilog rtl/periph/simpleuart.v
+read_verilog rtl/soc/system.v
 
-read_verilog system.v
-read_verilog ../../picorv32.v
-read_xdc synth_system.xdc
+# Read board pin constraints
+read_xdc boards/nexys_a7_100T/nexys_a7.xdc
 
-synth_design -part xc7a35t-cpg236-1 -top system
+# Run synthesis targeting Nexys A7-100T
+synth_design -part xc7a100tcsg324-1 -top system
 opt_design
 place_design
 route_design
 
-report_utilization
-report_timing
+# Utilization and timing summaries
+report_utilization -file build/utilization.rpt
+report_timing_summary -file build/timing_summary.rpt
 
-write_verilog -force synth_system.v
-write_bitstream -force synth_system.bit
-# write_mem_info -force synth_system.mmi
-
+# Generate bitstream
+write_bitstream -force build/system.bit

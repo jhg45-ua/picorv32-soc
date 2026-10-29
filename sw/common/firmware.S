@@ -9,4 +9,7 @@ addi sp, sp, %lo(16*1024)
 jal ra, main
 
 /* break */
-ebreak
+# ebreak
+
+/* infinite loop */
+1: j 1b

@@ -2,7 +2,7 @@
 
 module system_tb;
     reg clk = 1;
-    always #5 clk = ~clk;
+    always #5 clk = ~clk; // 100 MHz clock
 
     reg resetn = 0;
     initial begin
@@ -10,13 +10,14 @@ module system_tb;
             $dumpfile("system.vcd");
             $dumpvars(0, system_tb);
         end
-        repeat (100) @(posedge clk);
+        repeat (10) @(posedge clk);
         resetn <= 1;
     end
 
     wire trap;
-    wire [7:0] out_byte;
-    wire out_byte_en;
+    wire [14:0] leds;
+    wire ser_tx;
+    reg ser_rx = 1'b1;
 
     system uut (
         .clk        (clk        ),
@@ -26,12 +27,38 @@ module system_tb;
         .out_byte_en(out_byte_en)
     );
 
-    always @(posedge clk) begin
-        if (resetn && out_byte_en) begin
-            $write("%c", out_byte);
-            $fflush;
+    // -------------------------------------------------------------
+    // UART RX Decoder (Captures ser_tx and prints characters)
+    // -------------------------------------------------------------
+    localparam integer BIT_CYCLES = 868; // 100 MHz / 115200
+    localparam integer HALF_BIT   = 434;
+    reg [7:0] uart_buf;
+    always begin
+        @(negedge ser_tx); // Start bit edge
+        repeat (HALF_BIT) @(posedge clk); // Align to middle of start bit
+        // Sample 8 data bits (LSB first)
+        repeat (8) begin
+            repeat (BIT_CYCLES) @(posedge clk);
+            uart_buf = {ser_tx, uart_buf[7:1]};
         end
+        // Wait for stop bit
+        repeat (BIT_CYCLES) @(posedge clk);
+        $write("%c", uart_buf);
+        $fflush;
+    end
+    // Monitor LED changes
+    always @(leds) begin
+        $display("[%0t ns] LEDs updated: 15'b%b (0x%04h)", $time, leds, leds);
+    end
+    // Simulation timeout and trap check
+    initial begin
+        repeat (1000000) @(posedge clk);
+        $display("\n[SIMULATION DONE] Timeout reached safely.");
+        $finish;
+    end
+    always @(posedge clk) begin
         if (resetn && trap) begin
+            $display("\n[SIMULATION ERROR] CPU triggered TRAP at %0t ns!", $time);
             $finish;
         end
     end
