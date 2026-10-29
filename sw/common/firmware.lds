@@ -1,6 +1,6 @@
 SECTIONS {
+    . = ORG;            /* set up with --defsym=ORG=0x0 or --defsym=ORG=0x800 */
     .memory : {
-        . = ORG;            /* set up with --defsym=ORG=0x0 or --defsym=ORG=0x800 */
         *(.init); 
 		*(.text); 
 		*(*);

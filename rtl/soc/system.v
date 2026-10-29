@@ -72,7 +72,7 @@ module system #(
         .eoi         ()
     );
 
-    // 16 KB BRAM memory
+    // 16 KB BRAM memory, initialized with firmware.hex
     reg [31:0] memory [0:MEM_SIZE-1];
     initial $readmemh(FIRMWARE_FILE, memory);
 
