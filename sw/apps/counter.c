@@ -1,39 +1,4 @@
-#include <stdint.h>
-
-#define REG_LEDS 		(*(volatile uint32_t*)0x10000000)
-#define REG_UART_CLKDIV (*(volatile uint32_t*)0x20000004)
-#define REG_UART_DATA 	(*(volatile uint32_t*)0x20000008)
-
-void putc(char c)
-{
-    if (c == '\n') {
-        REG_UART_DATA = '\r';
-    }
-    // Hardware automatically stalls CPU via mem_ready until TX buffer accepts byte
-    REG_UART_DATA = c;
-}
-
-void puts(const char *s)
-{
-	while (*s) putc(*s++);
-}
-
-void *memcpy(void *dest, const void *src, int n)
-{
-	while (n) {
-		n--;
-		((char*)dest)[n] = ((char*)src)[n];
-	}
-	return dest;
-}
-
-// Simple delay loop
-void delay(volatile uint32_t count)
-{
-    while (count--) {
-        __asm__ volatile("");
-    }
-}
+#include "../common/io.h"
 
 void main(void)
 {

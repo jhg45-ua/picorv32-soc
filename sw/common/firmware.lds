@@ -1,11 +1,10 @@
 SECTIONS {
-	.memory : {
-		. = 0x000800;
-		*(.init);
-		*(.text);
+    .memory : {
+        . = ORG;            /* se pasa con --defsym=ORG=0x0 o 0x800 */
+        *(.init); 
+		*(.text); 
 		*(*);
-		. = ALIGN(4);
-		end = .;
-	}
+        . = ALIGN(4);
+        end = .;
+    }
 }
-
