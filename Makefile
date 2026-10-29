@@ -1,9 +1,12 @@
 # Toolchain and Vivado paths for RHEL 9.8
-TOOLCHAIN_PREFIX ?= /opt/riscv/bin/riscv64-unknown-elf-
+# If the toolchain isn't found use full path:
+# 	- RISC-V GNU Toolchain: /opt/riscv/bin/
+# 	- Vivado: /tools/Xilinx/2025.2/Vivado
+TOOLCHAIN_PREFIX ?= riscv64-unknown-elf-
 VIVADO_BASE      ?= /tools/Xilinx/2025.2/Vivado
-VIVADO           ?= $(VIVADO_BASE)/bin/vivado
-XVLOG            ?= $(VIVADO_BASE)/bin/xvlog
-XELAB            ?= $(VIVADO_BASE)/bin/xelab
+VIVADO           ?= vivado
+XVLOG            ?= xvlog
+XELAB            ?= xelab
 GLBL             ?= $(VIVADO_BASE)/data/verilog/src/glbl.v
 
 BUILD_DIR = build
@@ -25,9 +28,11 @@ $(BUILD_DIR):
 fw: firmware.hex
 
 firmware.hex: sw/common/firmware.S sw/common/firmware.c sw/common/firmware.lds $(BUILD_DIR)
+	@echo "-----------------------------------------------------------------------------"
 	$(TOOLCHAIN_PREFIX)gcc -Os -mabi=ilp32 -march=rv32i -ffreestanding -nostdlib -o $(BUILD_DIR)/firmware.elf \
 		sw/common/firmware.S sw/common/firmware.c \
 		--std=gnu99 -Wl,-Bstatic,-T,sw/common/firmware.lds,-Map,$(BUILD_DIR)/firmware.map,--strip-debug -lgcc
+	@echo "-----------------------------------------------------------------------------"
 	$(TOOLCHAIN_PREFIX)objcopy -O binary $(BUILD_DIR)/firmware.elf $(BUILD_DIR)/firmware.bin
 	python3 sw/common/makehex.py $(BUILD_DIR)/firmware.bin 4096 > firmware.hex
 
@@ -43,7 +48,10 @@ sim: firmware.hex
 # 3. FPGA Bitstream Synthesis
 # -------------------------------------------------------------
 synth: firmware.hex $(BUILD_DIR)
+	@echo "-----------------------------------------------------------------------------"
 	$(VIVADO) -nojournal -log $(BUILD_DIR)/synth.log -mode batch -source boards/nexys_a7_100T/synth_system.tcl
+	@echo "-----------------------------------------------------------------------------"
+
 	@echo "Synthesis completed! Bitstream is in $(BUILD_DIR)/system.bit"
 	@grep -B2 -A8 "Slice LUTs" $(BUILD_DIR)/utilization.rpt || true
 
@@ -54,6 +62,6 @@ prog:
 	$(VIVADO) -nojournal -mode batch -source boards/nexys_a7_100T/prog.tcl
 
 clean:
-	rm -rf $(BUILD_DIR) firmware.hex .Xil/ *.jou *.log xsim.dir/ xvlog.* xelab.* webtalk*
+	rm -rf $(BUILD_DIR) firmware.hex .Xil/ *.jou *.log xsim.dir/ xvlog.* xelab.* webtalk* work.system_tb#work.glbl.wdb
 
 .PHONY: help fw sim synth prog clean

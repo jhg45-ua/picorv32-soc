@@ -1,6 +1,6 @@
 SECTIONS {
 	.memory : {
-		. = 0x000000;
+		. = 0x000800;
 		*(.init);
 		*(.text);
 		*(*);

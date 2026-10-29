@@ -23,8 +23,9 @@ module system_tb;
         .clk        (clk        ),
         .resetn     (resetn     ),
         .trap       (trap       ),
-        .out_byte   (out_byte   ),
-        .out_byte_en(out_byte_en)
+        .leds       (leds       ),
+        .ser_tx     (ser_tx     ),
+        .ser_rx     (ser_rx     )
     );
 
     // -------------------------------------------------------------
@@ -52,7 +53,7 @@ module system_tb;
     end
     // Simulation timeout and trap check
     initial begin
-        repeat (1000000) @(posedge clk);
+        repeat (5000000) @(posedge clk);
         $display("\n[SIMULATION DONE] Timeout reached safely.");
         $finish;
     end

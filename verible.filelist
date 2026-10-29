@@ -1,0 +1,3 @@
+rtl/cores/picorv32.v
+rtl/periph/simpleuart.v
+rtl/soc/system.v

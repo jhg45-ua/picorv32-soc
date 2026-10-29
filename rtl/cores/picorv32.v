@@ -1373,7 +1373,8 @@ module picorv32 #(
     wire [5:0] cpuregs_raddr1 = ENABLE_REGS_DUALPORT ? decoded_rs1 : decoded_rs;
     wire [5:0] cpuregs_raddr2 = ENABLE_REGS_DUALPORT ? decoded_rs2 : 0;
 
-    `PICORV32_REGS cpuregs (
+    // Old: `PICORV32_REGS
+    picorv32_regs cpuregs (
         .clk(clk),
         .wen(resetn && cpuregs_write && latched_rd),
         .waddr(cpuregs_waddr),
