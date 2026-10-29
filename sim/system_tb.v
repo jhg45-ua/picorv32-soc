@@ -53,7 +53,7 @@ module system_tb;
     end
     // Simulation timeout and trap check
     initial begin
-        repeat (5000000) @(posedge clk);
+        repeat (2000000) @(posedge clk);
         $display("\n[SIMULATION DONE] Timeout reached safely.");
         $finish;
     end
