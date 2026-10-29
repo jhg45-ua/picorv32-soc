@@ -10,6 +10,8 @@ XELAB            ?= xelab
 GLBL             ?= $(VIVADO_BASE)/data/verilog/src/glbl.v
 
 BUILD_DIR = build
+APP	     ?= counter
+PORT     ?= /dev/ttyUSB1
 
 help:
 	@echo "Available commands:"
@@ -23,18 +25,34 @@ $(BUILD_DIR):
 	mkdir -p $(BUILD_DIR)
 
 # -------------------------------------------------------------
-# 1. Firmware Compilation
+# 1. Bootloader (FPGA initial memory) & User Apps
 # -------------------------------------------------------------
+# Bootloader link on 0x0 -> goes directly to BRAM at synthesis
 fw: firmware.hex
 
-firmware.hex: sw/common/firmware.S sw/common/firmware.c sw/common/firmware.lds $(BUILD_DIR)
+firmware.hex: sw/common/firmware.S sw/bootloader/bootloader.c sw/common/firmware.lds sw/common/io.h $(BUILD_DIR)
 	@echo "-----------------------------------------------------------------------------"
-	$(TOOLCHAIN_PREFIX)gcc -Os -mabi=ilp32 -march=rv32i -ffreestanding -nostdlib -o $(BUILD_DIR)/firmware.elf \
-		sw/common/firmware.S sw/common/firmware.c \
-		--std=gnu99 -Wl,-Bstatic,-T,sw/common/firmware.lds,-Map,$(BUILD_DIR)/firmware.map,--strip-debug -lgcc
+	$(TOOLCHAIN_PREFIX)gcc -Os -mabi=ilp32 -march=rv32i -ffreestanding -nostdlib -o $(BUILD_DIR)/bootloader.elf \
+		sw/common/firmware.S sw/bootloader/bootloader.c \
+		--std=gnu99 -Wl,-Bstatic,-T,sw/common/firmware.lds,--defsym=ORG=0x0,-Map,$(BUILD_DIR)/bootloader.map,--strip-debug -lgcc
 	@echo "-----------------------------------------------------------------------------"
-	$(TOOLCHAIN_PREFIX)objcopy -O binary $(BUILD_DIR)/firmware.elf $(BUILD_DIR)/firmware.bin
-	python3 sw/common/makehex.py $(BUILD_DIR)/firmware.bin 4096 > firmware.hex
+
+	$(TOOLCHAIN_PREFIX)objcopy -O binary $(BUILD_DIR)/bootloader.elf $(BUILD_DIR)/bootloader.bin
+	python3 sw/common/makehex.py $(BUILD_DIR)/bootloader.bin 4096 > firmware.hex
+
+# Compile any App from sw/apps/$(APP).c link to 0x800
+app: $(BUILD_DIR)
+	@echo "-----------------------------------------------------------------------------"
+	$(TOOLCHAIN_PREFIX)gcc -Os -mabi=ilp32 -march=rv32i -ffreestanding -nostdlib -o $(BUILD_DIR)/$(APP).elf \
+		sw/common/firmware.S sw/apps/$(APP).c \
+		--std=gnu99 -Wl,-Bstatic,-T,sw/common/firmware.lds,--defsym=ORG=0x800,-Map,$(BUILD_DIR)/$(APP).map,--strip-debug -lgcc
+	@echo "-----------------------------------------------------------------------------"
+
+	$(TOOLCHAIN_PREFIX)objcopy -O binary $(BUILD_DIR)/$(APP).elf $(BUILD_DIR)/$(APP).bin
+
+# Load App through UART to the FPGA (bootloader must be running)
+upload: app
+	python3 sw/common/upload.py $(BUILD_DIR)/$(APP).bin $(PORT)
 
 # -------------------------------------------------------------
 # 2. RTL Simulation (using Vivado xvlog/xelab)
