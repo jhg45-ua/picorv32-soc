@@ -97,7 +97,10 @@ module system #(
         .reg_div_di  (mem_wdata    ),
         .reg_div_do  (uart_div_do  ),
         .reg_dat_we  (uart_dat_sel ? mem_wstrb[0] : 1'b0),
-        .reg_dat_re  (uart_dat_sel && !mem_wstrb),
+        // Qualified with !mem_ready so reg_dat_re pulses for only 1 cycle (cycle 1).
+        // Since bus reads take 2 cycles (registered mem_ready), a 2-cycle pulse would
+        // trigger a spurious clear-on-read on simpleuart and discard incoming RX bytes.
+        .reg_dat_re  (uart_dat_sel && !mem_wstrb && !mem_ready),
         .reg_dat_di  (mem_wdata    ),
         .reg_dat_do  (uart_dat_do  ),
         .reg_dat_wait(uart_dat_wait)
