@@ -1,0 +1,3 @@
+# Verible rules for classic Verilog (IEEE 1364-2001) compatibility disabled rules
+-explicit-parameter-storage-type
+-unpacked-dimensions-range-ordering

@@ -4,6 +4,7 @@
 
   // El LSP de Verible detecta automáticamente 'verible.filelist' en la raíz
   "verible.arguments": [
-    "--file_list_path=verible.filelist"
+    "--file_list_path=verible.filelist",
+    "--rules=-explicit-parameter-storage-type,-unpacked-dimensions-range-ordering"
   ]
 }

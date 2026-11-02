@@ -10,9 +10,9 @@ RESET  := \033[0m
 # 	- Vivado: /tools/Xilinx/2025.2/Vivado
 TOOLCHAIN_PREFIX ?= riscv64-unknown-elf-
 VIVADO_BASE      ?= /tools/Xilinx/2025.2/Vivado
-VIVADO           ?= vivado
-XVLOG            ?= xvlog
-XELAB            ?= xelab
+VIVADO           ?= vivado	#
+XVLOG            ?= xvlog	# Vivado simulator compiler
+XELAB            ?= xelab	# Vivado simulator elaborator
 GLBL             ?= $(VIVADO_BASE)/data/verilog/src/glbl.v
 IVERILOG  		 ?= iverilog -g2012
 VVP              ?= vvp
