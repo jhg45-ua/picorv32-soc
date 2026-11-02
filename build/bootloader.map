@@ -1,0 +1,48 @@
+
+Merging object attributes
+
+
+There are no discarded input sections
+
+Memory Configuration
+
+Name             Origin             Length             Attributes
+*default*        0x00000000         0xffffffff
+
+Linker script and memory map
+
+LOAD /tmp/ccYvOyyy.o
+LOAD /tmp/ccKTuMbw.o
+                0x00000000                        . = ORG
+
+.memory         0x00000000      0x214
+ *(.init)
+ .init          0x00000000       0x10 /tmp/ccYvOyyy.o
+ *(.text)
+ .text          0x00000010        0x0 /tmp/ccYvOyyy.o
+ .text          0x00000010       0x30 /tmp/ccKTuMbw.o
+ *(*)
+ .data          0x00000040        0x0 /tmp/ccYvOyyy.o
+ .bss           0x00000040        0x0 /tmp/ccYvOyyy.o
+ .riscv.attributes
+                0x00000040       0x1a /tmp/ccYvOyyy.o
+ .data          0x0000005a        0x0 /tmp/ccKTuMbw.o
+ .bss           0x0000005a        0x0 /tmp/ccKTuMbw.o
+ *fill*         0x0000005a        0x2 
+ .rodata.str1.4
+                0x0000005c       0x63 /tmp/ccKTuMbw.o
+ *fill*         0x000000bf        0x1 
+ .text.startup  0x000000c0      0x128 /tmp/ccKTuMbw.o
+                0x000000c0                main
+ .comment       0x000001e8        0xf /tmp/ccKTuMbw.o
+                                 0x10 (size before relaxing)
+ .note.GNU-stack
+                0x000001f7        0x0 /tmp/ccKTuMbw.o
+ .riscv.attributes
+                0x000001f7       0x1c /tmp/ccKTuMbw.o
+                0x00000214                        . = ALIGN (0x4)
+ *fill*         0x00000213        0x1 
+                0x00000214                        end = .
+                0x00000000                        ORG = 0x0
+LOAD /opt/riscv/lib/gcc/riscv64-unknown-elf/16.1.0/rv32i/ilp32/libgcc.a
+OUTPUT(build/bootloader.elf elf32-littleriscv)
