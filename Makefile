@@ -8,6 +8,10 @@ VIVADO           ?= vivado
 XVLOG            ?= xvlog
 XELAB            ?= xelab
 GLBL             ?= $(VIVADO_BASE)/data/verilog/src/glbl.v
+IVERILOG  		 ?= iverilog
+VVP              ?= vvp
+VERILATOR        ?= verilator
+SURFER           ?= surfer
 
 BUILD_DIR = build
 APP	     ?= counter
@@ -15,19 +19,23 @@ PORT     ?= /dev/ttyUSB1
 
 help:
 	@echo "Available commands:"
-	@echo "  make fw     - Compile RISC-V firmware to firmware.hex"
-	@echo "  make sim    - Run behavioral simulation with Vivado xsim"
-	@echo "  make synth  - Run non-project batch synthesis & generate system.bit"
-	@echo "  make prog   - Program the Nexys A7-100T FPGA over JTAG"
-	@echo "  make clean  - Remove build artifacts and logs"
+	@echo "  make fw     	   - Compile RISC-V firmware to firmware.hex"
+	@echo "  make sim    	   - Run behavioral simulation with Vivado xsim"
+	@echo "  make sim-iverilog - Run behavioral simulation with Icarus Verilog"
+	@echo "  make sim-waves    - Run behavioral simulation with Icarus Verilog and generate waveform.vcd"
+	@echo "  make viewer       - Open waveform.vcd in GTKWave"
+	@echo "  make synth        - Run non-project batch synthesis & generate system.bit"
+	@echo "  make prog         - Program the Nexys A7-100T FPGA over JTAG"
+	@echo "  make lint         - Run Verilator linting on the RTL"
+	@echo "  make clean        - Remove build artifacts and logs"
 
 $(BUILD_DIR):
 	mkdir -p $(BUILD_DIR)
 
 # -------------------------------------------------------------
-# 1. Bootloader (FPGA initial memory) & User Apps
+# Bootloader (FPGA initial memory) & User Apps
 # -------------------------------------------------------------
-# Bootloader link on 0x0 -> goes directly to BRAM at synthesis
+# Bootloader link to 0x0 -> goes directly to BRAM at synthesis
 fw: firmware.hex
 
 firmware.hex: sw/common/firmware.S sw/bootloader/bootloader.c sw/common/firmware.lds sw/common/io.h $(BUILD_DIR)
@@ -40,7 +48,7 @@ firmware.hex: sw/common/firmware.S sw/bootloader/bootloader.c sw/common/firmware
 	$(TOOLCHAIN_PREFIX)objcopy -O binary $(BUILD_DIR)/bootloader.elf $(BUILD_DIR)/bootloader.bin
 	python3 sw/common/makehex.py $(BUILD_DIR)/bootloader.bin 4096 > firmware.hex
 
-# Compile any App from sw/apps/$(APP).c link to 0x800
+# Compile any App from sw/apps/$(APP).c, link to 0x800
 app: $(BUILD_DIR)
 	@echo "-----------------------------------------------------------------------------"
 	$(TOOLCHAIN_PREFIX)gcc -Os -mabi=ilp32 -march=rv32i -ffreestanding -nostdlib -o $(BUILD_DIR)/$(APP).elf \
@@ -55,7 +63,7 @@ upload: app
 	python3 sw/common/upload.py $(BUILD_DIR)/$(APP).bin $(PORT)
 
 # -------------------------------------------------------------
-# 2. RTL Simulation (using Vivado xvlog/xelab)
+# RTL Simulation (using Vivado xvlog/xelab)
 # -------------------------------------------------------------
 sim: firmware.hex
 	$(XVLOG) rtl/cores/picorv32.v rtl/periph/simpleuart.v rtl/soc/system.v sim/system_tb.v
@@ -63,7 +71,21 @@ sim: firmware.hex
 	$(XELAB) -L unifast_ver -L unisims_ver -R system_tb glbl
 
 # -------------------------------------------------------------
-# 3. FPGA Bitstream Synthesis
+# RTL Simulation (using Icarus Verilog)
+# -------------------------------------------------------------
+sim-iverilog: firmware.hex $(BUILD_DIR)
+	$(IVERILOG) -o $(BUILD_DIR)/simv rtl/cores/picorv32.v rtl/periph/simpleuart.v rtl/soc/system.v sim/system_tb.v
+	$(VVP) $(BUILD_DIR)/simv
+
+sim-waves: firmware.hex $(BUILD_DIR)
+	$(IVERILOG) -o $(BUILD_DIR)/simv rtl/cores/picorv32.v rtl/periph/simpleuart.v rtl/soc/system.v sim/system_tb.v
+	$(VVP) -n $(BUILD_DIR)/simv +vcd
+
+viewer: sim-waves
+	$(SURFER) system.vcd
+
+# -------------------------------------------------------------
+# FPGA Bitstream Synthesis (using Vivado non-project batch mode)
 # -------------------------------------------------------------
 synth: firmware.hex $(BUILD_DIR)
 	@echo "-----------------------------------------------------------------------------"
@@ -74,12 +96,21 @@ synth: firmware.hex $(BUILD_DIR)
 	@grep -B2 -A8 "Slice LUTs" $(BUILD_DIR)/utilization.rpt || true
 
 # -------------------------------------------------------------
-# 4. FPGA JTAG Programming
+# FPGA JTAG Programming (using Vivado hw-manager)
 # -------------------------------------------------------------
 prog:
 	$(VIVADO) -nojournal -mode batch -source boards/nexys_a7_100T/prog.tcl
 
+# -------------------------------------------------------------
+# Linting (using Verilator)
+# -------------------------------------------------------------
+lint:
+	$(VERILATOR) -sv --lint-only -Wall \
+		-y rtl/cores -y rtl/periph -y rtl/soc \
+		-Wno-UNUSEDSIGNAL -Wno-PINCONNECTEMPTY -Wno-BLKSEQ -Wno-DECLFILENAME -Wno-GENUNNAMED -Wno-MULTITOP \
+		rtl/soc/system.v
+
 clean:
-	rm -rf $(BUILD_DIR) firmware.hex .Xil/ *.jou *.log xsim.dir/ xvlog.* xelab.* webtalk* work.system_tb#work.glbl.wdb
+	rm -rf $(BUILD_DIR) firmware.hex .Xil/ *.jou *.log xsim.dir/ xvlog.* xelab.* webtalk* work.system_tb#work.glbl.wdb system.vcd
 
 .PHONY: help fw sim synth prog clean
