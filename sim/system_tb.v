@@ -6,7 +6,7 @@ module system_tb;
 
     reg resetn = 0;
     initial begin
-        if ($test$plusargs("vcd")) begin
+        if ($value$plusargs("vcd")) begin
             $dumpfile("system.vcd");
             $dumpvars(0, system_tb);
         end
