@@ -2,7 +2,7 @@
 
 module system #(
     parameter integer MEM_SIZE = 4096,
-    parameter FIRMWARE_FILE = "firmware.hex"
+    parameter string FIRMWARE_FILE = "build/firmware.hex"
 ) (
     input             clk,     // 100 MHz oscillator from Nexys A7 (E3)
     input             resetn,  // CPU_RESETN red push button (C12, active-low)
@@ -71,7 +71,7 @@ module system #(
   );
 
   // 16 KB BRAM memory, initialized with firmware.hex
-  reg [31:0] memory[0:MEM_SIZE-1];
+  reg [31:0] memory[MEM_SIZE];
   initial $readmemh(FIRMWARE_FILE, memory);
 
   // Register used to hold the read data from memory or MMIO devices
