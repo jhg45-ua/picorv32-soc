@@ -1,0 +1,52 @@
+# ==========================================
+# Build outputs y firmware binarios
+# ==========================================
+build/
+*.hex
+*.elf
+*.bin
+*.map
+*.o
+*.d
+
+# ==========================================
+# Vivado: Temporales, logs y bases de datos
+# ==========================================
+.Xil/
+*.jou
+*.log
+*.str
+*.pb
+*.wdb
+webtalk*
+
+# Vivado: Directorios de proyecto autogenerados
+*.cache/
+*.hw/
+*.ip_user_files/
+*.runs/
+*.sim/
+*.gen/
+
+# Archivos de simulación (Vivado xsim, Icarus, Verilator)
+xsim.dir/
+xvlog.*
+xelab.*
+xsim.*
+obj_dir/
+*.vcd
+*.fst
+work.*
+
+# ==========================================
+# Editores y Sistema Operativo
+# ==========================================
+.DS_Store
+.directory
+*~
+*.swp
+# Si usas VSCode, ignorar workspace local excepto configuración
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/extensions.json
