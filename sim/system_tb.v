@@ -107,6 +107,62 @@ module system_tb;
     $display("========================================================\n");
   end
 `endif
+
+`ifdef PICORV32_TMR_PC
+  // -------------------------------------------------------------
+  // TMR PC Fault Injection Test
+  // Injects an SEU into reg_pc_a and verifies that the voter masks
+  // the corrupted address and heals the branch.
+  // -------------------------------------------------------------
+  initial begin
+    // Wait for the FSM test to finish, then test PC hardening
+    repeat (60000) @(posedge clk);
+
+    $display("========================================================");
+    $display("[TMR PC TEST] Starting PC SEU Fault Injection Verification");
+    $display("========================================================");
+
+    // 1. Check initial healthy status
+    if (uut.cpu.pc_fault_detected) begin
+      $display("[TMR PC TEST] ERROR: Discrepancy already present in PC before injection!");
+    end
+
+    // 2. Inject SEU into reg_pc_a (corrupt to an invalid address)
+    @(posedge clk);
+    $display("[TMR PC TEST] [%0t ns] Injecting SEU: forcing reg_pc_a = 0xDEAD0000...", $time);
+    $display("[TMR PC TEST] Pre-SEU  PC: A=0x%08h, B=0x%08h, C=0x%08h -> Voted=0x%08h",
+             uut.cpu.reg_pc_a, uut.cpu.reg_pc_b, uut.cpu.reg_pc_c, uut.cpu.reg_pc);
+
+    force uut.cpu.reg_pc_a = 32'hdead0000;
+    #1;
+
+    // 3. Verify voter masking and fault detection
+    if (uut.cpu.pc_fault_detected && (uut.cpu.reg_pc != 32'hdead0000)) begin
+      $display("[TMR PC TEST] SUCCESS: Voter masked PC fault! Core sees Voted=0x%08h", uut.cpu.reg_pc);
+      $display("[TMR PC TEST] SUCCESS: Telemetry flag asserted (pc_fault_detected = 1)");
+      $display("[TMR PC TEST] Mid-SEU  PC: A=0x%08h, B=0x%08h, C=0x%08h -> Voted=0x%08h",
+               uut.cpu.reg_pc_a, uut.cpu.reg_pc_b, uut.cpu.reg_pc_c, uut.cpu.reg_pc);
+    end else begin
+      $display("[TMR PC TEST] FAILURE: PC voter did not mask fault or flag was not set!");
+    end
+
+    // 4. Release force and verify self-healing feedback on next clock cycle
+    @(posedge clk);
+    release uut.cpu.reg_pc_a;
+    @(posedge clk);
+    #1;
+
+    if (!uut.cpu.pc_fault_detected && (uut.cpu.reg_pc_a == uut.cpu.reg_pc_b)) begin
+      $display("[TMR PC TEST] SUCCESS: Self-healing verified! Branch A PC recovered to 0x%08h", uut.cpu.reg_pc_a);
+      $display("[TMR PC TEST] Telemetry cleared: pc_fault_detected = 0");
+    end else begin
+      $display("[TMR PC TEST] FAILURE: Self-healing failed! Branch A PC did not recover: A=0x%08h, B=0x%08h",
+               uut.cpu.reg_pc_a, uut.cpu.reg_pc_b);
+    end
+
+    $display("========================================================\n");
+  end
+`endif
   // Simulation timeout and trap check
   initial begin
     repeat (1000000) @(posedge clk);

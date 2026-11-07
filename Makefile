@@ -91,7 +91,7 @@ sim-iverilog: $(BUILD_DIR)/firmware.hex $(BUILD_DIR)
 	$(VVP) $(BUILD_DIR)/simv
 
 sim-tmr: $(BUILD_DIR)/firmware.hex $(BUILD_DIR)
-	$(IVERILOG) -DPICORV32_TMR_FSM -o $(BUILD_DIR)/simv_tmr rtl/common/tmr_voter.v rtl/cores/picorv32.v rtl/periph/simpleuart.v rtl/soc/system.v sim/system_tb.v
+	$(IVERILOG) -DPICORV32_TMR -o $(BUILD_DIR)/simv_tmr rtl/common/tmr_voter.v rtl/cores/picorv32.v rtl/periph/simpleuart.v rtl/soc/system.v sim/system_tb.v
 	$(VVP) $(BUILD_DIR)/simv_tmr
 
 sim-waves: $(BUILD_DIR)/firmware.hex $(BUILD_DIR)

@@ -54,6 +54,12 @@
 // design are read in the correct order.
 `define PICORV32_V
 
+// [TMR Hardening] Master switch: if PICORV32_TMR is defined, enable all sub-TMRs
+`ifdef PICORV32_TMR
+  `define PICORV32_TMR_FSM
+  `define PICORV32_TMR_PC
+`endif
+
 // [TMR Hardening] Macro for FSM state assignments:
 // If PICORV32_TMR_FSM is enabled, updates all 3 triplicated registers;
 // otherwise behaves exactly as the original unhardened single register.
@@ -64,6 +70,23 @@
     cpu_state_a <= (st); \
     cpu_state_b <= (st); \
     cpu_state_c <= (st); \
+  end
+`endif
+
+// [TMR Hardening] Macro for PC assignments:
+`ifndef PICORV32_TMR_PC
+  `define SET_REG_PC(val) reg_pc <= (val)
+  `define SET_REG_NEXT_PC(val) reg_next_pc <= (val)
+`else
+  `define SET_REG_PC(val) begin \
+    reg_pc_a <= (val); \
+    reg_pc_b <= (val); \
+    reg_pc_c <= (val); \
+  end
+  `define SET_REG_NEXT_PC(val) begin \
+    reg_next_pc_a <= (val); \
+    reg_next_pc_b <= (val); \
+    reg_next_pc_c <= (val); \
   end
 `endif
 
@@ -186,8 +209,46 @@ module picorv32 #(
     localparam [35:0] TRACE_IRQ    = {4'b 1000, 32'b 0};
 
     reg [63:0] count_cycle, count_instr;
-    reg [31:0] reg_pc, reg_next_pc, reg_op1, reg_op2, reg_out;
+    reg [31:0] reg_op1, reg_op2, reg_out;
     reg [4:0] reg_sh;
+
+    // [TMR Hardening] Program Counter (PC) declaration:
+    // Triplicates reg_pc and reg_next_pc (32-bit each) with majority voting
+`ifndef PICORV32_TMR_PC
+    reg [31:0] reg_pc, reg_next_pc;
+`else
+    (* keep = "true", syn_keep = "true" *) reg [31:0] reg_pc_a;
+    (* keep = "true", syn_keep = "true" *) reg [31:0] reg_pc_b;
+    (* keep = "true", syn_keep = "true" *) reg [31:0] reg_pc_c;
+    wire [31:0] reg_pc;
+    wire        pc_fault_detected;
+
+    tmr_voter #(
+        .WIDTH(32)
+    ) u_voter_pc (
+        .in_a(reg_pc_a),
+        .in_b(reg_pc_b),
+        .in_c(reg_pc_c),
+        .out (reg_pc),
+        .fault_detected(pc_fault_detected)
+    );
+
+    (* keep = "true", syn_keep = "true" *) reg [31:0] reg_next_pc_a;
+    (* keep = "true", syn_keep = "true" *) reg [31:0] reg_next_pc_b;
+    (* keep = "true", syn_keep = "true" *) reg [31:0] reg_next_pc_c;
+    wire [31:0] reg_next_pc;
+    wire        next_pc_fault_detected;
+
+    tmr_voter #(
+        .WIDTH(32)
+    ) u_voter_next_pc (
+        .in_a(reg_next_pc_a),
+        .in_b(reg_next_pc_b),
+        .in_c(reg_next_pc_c),
+        .out (reg_next_pc),
+        .fault_detected(next_pc_fault_detected)
+    );
+`endif
 
     reg [31:0] next_insn_opcode;
     reg [31:0] dbg_insn_opcode;
@@ -1497,10 +1558,18 @@ module picorv32 #(
         cpu_state_b <= cpu_state;
         cpu_state_c <= cpu_state;
 `endif
+`ifdef PICORV32_TMR_PC
+        reg_pc_a <= reg_pc;
+        reg_pc_b <= reg_pc;
+        reg_pc_c <= reg_pc;
+        reg_next_pc_a <= reg_next_pc;
+        reg_next_pc_b <= reg_next_pc;
+        reg_next_pc_c <= reg_next_pc;
+`endif
 
         if (!resetn) begin
-            reg_pc <= PROGADDR_RESET;
-            reg_next_pc <= PROGADDR_RESET;
+            `SET_REG_PC(PROGADDR_RESET);
+            `SET_REG_NEXT_PC(PROGADDR_RESET);
             if (ENABLE_COUNTERS)
                 count_instr <= 0;
             latched_store <= 0;
@@ -1567,8 +1636,8 @@ module picorv32 #(
                         trace_data <= (irq_active ? TRACE_IRQ : 0) | (latched_stalu ? alu_out_q : reg_out);
                 end
 
-                reg_pc <= current_pc;
-                reg_next_pc <= current_pc;
+                `SET_REG_PC(current_pc);
+                `SET_REG_NEXT_PC(current_pc);
 
                 latched_store <= 0;
                 latched_stalu <= 0;
@@ -1593,7 +1662,7 @@ module picorv32 #(
                     if (irq_pending) begin
                         latched_store <= 1;
                         reg_out <= irq_pending;
-                        reg_next_pc <= current_pc + (compressed_instr ? 2 : 4);
+                        `SET_REG_NEXT_PC(current_pc + (compressed_instr ? 2 : 4));
                         mem_do_rinst <= 1;
                     end else
                         do_waitirq <= 1;
@@ -1601,7 +1670,7 @@ module picorv32 #(
                 if (decoder_trigger) begin
                     `debug($display("-- %-0t", $time);)
                     irq_delay <= irq_active;
-                    reg_next_pc <= current_pc + (compressed_instr ? 2 : 4);
+                    `SET_REG_NEXT_PC(current_pc + (compressed_instr ? 2 : 4));
                     if (ENABLE_TRACE)
                         latched_trace <= 1;
                     if (ENABLE_COUNTERS) begin
@@ -1610,7 +1679,7 @@ module picorv32 #(
                     end
                     if (instr_jal) begin
                         mem_do_rinst <= 1;
-                        reg_next_pc <= current_pc + decoded_imm_j;
+                        `SET_REG_NEXT_PC(current_pc + decoded_imm_j);
                         latched_branch <= 1;
                     end else begin
                         mem_do_rinst <= 0;
@@ -2007,6 +2076,7 @@ module picorv32 #(
         irq_pending <= next_irq_pending & ~MASKED_IRQ;
 
         if (!CATCH_MISALIGN) begin
+`ifndef PICORV32_TMR_PC
             if (COMPRESSED_ISA) begin
                 reg_pc[0] <= 0;
                 reg_next_pc[0] <= 0;
@@ -2014,6 +2084,15 @@ module picorv32 #(
                 reg_pc[1:0] <= 0;
                 reg_next_pc[1:0] <= 0;
             end
+`else
+            if (COMPRESSED_ISA) begin
+                reg_pc_a[0] <= 0; reg_pc_b[0] <= 0; reg_pc_c[0] <= 0;
+                reg_next_pc_a[0] <= 0; reg_next_pc_b[0] <= 0; reg_next_pc_c[0] <= 0;
+            end else begin
+                reg_pc_a[1:0] <= 0; reg_pc_b[1:0] <= 0; reg_pc_c[1:0] <= 0;
+                reg_next_pc_a[1:0] <= 0; reg_next_pc_b[1:0] <= 0; reg_next_pc_c[1:0] <= 0;
+            end
+`endif
         end
         current_pc = 'bx;
     end
