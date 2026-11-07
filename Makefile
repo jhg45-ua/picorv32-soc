@@ -28,6 +28,7 @@ help:
 	@echo "  make fw     	   - Compile RISC-V firmware to firmware.hex"
 	@echo "  make sim    	   - Run behavioral simulation with Vivado xsim"
 	@echo "  make sim-iverilog - Run behavioral simulation with Icarus Verilog"
+	@echo "  make sim-tmr      - Run simulation with TMR enabled and fault injection test"
 	@echo "  make sim-waves    - Run behavioral simulation with Icarus Verilog and generate waveform.vcd"
 	@echo "  make viewer       - Open waveform.vcd in GTKWave"
 	@echo "  make synth        - Run non-project batch synthesis & generate system.bit"
@@ -89,6 +90,10 @@ sim-iverilog: $(BUILD_DIR)/firmware.hex $(BUILD_DIR)
 	$(IVERILOG) -o $(BUILD_DIR)/simv rtl/common/tmr_voter.v rtl/cores/picorv32.v rtl/periph/simpleuart.v rtl/soc/system.v sim/system_tb.v
 	$(VVP) $(BUILD_DIR)/simv
 
+sim-tmr: $(BUILD_DIR)/firmware.hex $(BUILD_DIR)
+	$(IVERILOG) -DPICORV32_TMR_FSM -o $(BUILD_DIR)/simv_tmr rtl/common/tmr_voter.v rtl/cores/picorv32.v rtl/periph/simpleuart.v rtl/soc/system.v sim/system_tb.v
+	$(VVP) $(BUILD_DIR)/simv_tmr
+
 sim-waves: $(BUILD_DIR)/firmware.hex $(BUILD_DIR)
 	$(IVERILOG) -o $(BUILD_DIR)/simv rtl/common/tmr_voter.v rtl/cores/picorv32.v rtl/periph/simpleuart.v rtl/soc/system.v sim/system_tb.v
 	$(VVP) -n $(BUILD_DIR)/simv +vcd
@@ -129,4 +134,4 @@ clean:
 
 	@printf "$(GREEN)[OK]$(RESET)     Clean completed!\n"
 
-.PHONY: help fw sim synth prog clean
+.PHONY: help fw sim sim-iverilog sim-tmr synth prog clean
