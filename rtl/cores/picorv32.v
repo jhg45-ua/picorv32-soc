@@ -737,7 +737,7 @@ module picorv32 #(
                                     prefetched_high_word <= 0;
                                 end
                             end
-                            `SET_MEM_STATE(mem_do_rinst || mem_do_rdata ? 0 : 3);
+                            `SET_MEM_STATE(mem_do_rinst||mem_do_rdata?0:3);
                         end
                     end
                 end
@@ -1727,16 +1727,16 @@ module picorv32 #(
                         irq_state == 2'b01 ? 2'b10 : 2'b00;
                     latched_compr <= latched_compr;
                     if (ENABLE_IRQ_QREGS) begin
-                        `SET_LATCHED_RD(irqregs_offset | irq_state[0]);
+                        `SET_LATCHED_RD(irqregs_offset|irq_state[0]);
                     end else begin
-                        `SET_LATCHED_RD(irq_state[0] ? 4 : 3);
+                        `SET_LATCHED_RD(irq_state[0]?4:3);
                     end
                 end else
                 if (ENABLE_IRQ && (decoder_trigger || do_waitirq) && instr_waitirq) begin
                     if (irq_pending) begin
                         latched_store <= 1;
                         reg_out <= irq_pending;
-                        `SET_REG_NEXT_PC(current_pc + (compressed_instr ? 2 : 4));
+                        `SET_REG_NEXT_PC(current_pc+(compressed_instr?2:4));
                         mem_do_rinst <= 1;
                     end else
                         do_waitirq <= 1;
@@ -1744,7 +1744,7 @@ module picorv32 #(
                 if (decoder_trigger) begin
                     `debug($display("-- %-0t", $time);)
                     irq_delay <= irq_active;
-                    `SET_REG_NEXT_PC(current_pc + (compressed_instr ? 2 : 4));
+                    `SET_REG_NEXT_PC(current_pc+(compressed_instr?2:4));
                     if (ENABLE_TRACE)
                         latched_trace <= 1;
                     if (ENABLE_COUNTERS) begin
@@ -1753,7 +1753,7 @@ module picorv32 #(
                     end
                     if (instr_jal) begin
                         mem_do_rinst <= 1;
-                        `SET_REG_NEXT_PC(current_pc + decoded_imm_j);
+                        `SET_REG_NEXT_PC(current_pc+decoded_imm_j);
                         latched_branch <= 1;
                     end else begin
                         mem_do_rinst <= 0;
@@ -1847,7 +1847,7 @@ module picorv32 #(
                         reg_out <= cpuregs_rs1;
                         dbg_rs1val <= cpuregs_rs1;
                         dbg_rs1val_valid <= 1;
-                        `SET_LATCHED_RD(latched_rd | irqregs_offset);
+                        `SET_LATCHED_RD(latched_rd|irqregs_offset);
                         latched_store <= 1;
                         `SET_CPU_STATE(cpu_state_fetch);
                     end
