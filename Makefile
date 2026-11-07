@@ -109,7 +109,7 @@ synth: $(BUILD_DIR)/firmware.hex $(BUILD_DIR)
 
 	$(VIVADO) -nojournal -log $(BUILD_DIR)/synth.log -mode batch -source boards/nexys_a7_100T/synth_system.tcl
 
-	@printf "$(GREEN)[OK]$(RESET)     Synthesis completed! Bitstream is in $(BUILD_DIR)/system.bit\n"
+	@printf "$(GREEN)[OK]$(RESET)     Synthesis completed! Bitstream is in prebuilt/system.bit\n"
 	@grep -B2 -A8 "Slice LUTs" $(BUILD_DIR)/utilization.rpt || true
 
 # -------------------------------------------------------------

@@ -17,5 +17,7 @@ route_design
 report_utilization -file build/utilization.rpt
 report_timing_summary -file build/timing_summary.rpt
 
-# Generate bitstream
-write_bitstream -force build/system.bit
+# Generate compressed bitstream in prebuilt/
+file mkdir prebuilt
+set_property BITSTREAM.GENERAL.COMPRESS TRUE [current_design]
+write_bitstream -force prebuilt/system.bit

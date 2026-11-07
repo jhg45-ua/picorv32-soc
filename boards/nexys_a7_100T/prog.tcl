@@ -9,7 +9,7 @@ current_hw_device $device
 
 # Refresh the hardware device and program the bitstream
 refresh_hw_device -update_hw_probes false $device
-set_property PROGRAM.FILE {build/system.bit} $device
+set_property PROGRAM.FILE {prebuilt/system.bit} $device
 program_hw_devices $device
 
 # Close the hardware target and disconnect from the hardware server

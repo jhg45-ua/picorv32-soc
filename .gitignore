@@ -1,5 +1,5 @@
 # ==========================================
-# Build outputs y firmware binarios
+# Build outputs y binarios temporales
 # ==========================================
 build/
 *.hex
@@ -8,6 +8,14 @@ build/
 *.map
 *.o
 *.d
+*.bit
+
+# ==========================================
+# Excepción: Prebuilt bitstream para el portátil
+# ==========================================
+!prebuilt/
+!prebuilt/*.bit
+!prebuilt/.gitkeep
 
 # ==========================================
 # Vivado: Temporales, logs y bases de datos
@@ -28,7 +36,7 @@ webtalk*
 *.sim/
 *.gen/
 
-# Archivos de simulación (Vivado xsim, Icarus, Verilator)
+# Simuladores (Vivado xsim, Icarus, Verilator)
 xsim.dir/
 xvlog.*
 xelab.*
@@ -45,7 +53,6 @@ work.*
 .directory
 *~
 *.swp
-# Si usas VSCode, ignorar workspace local excepto configuración
 .vscode/*
 !.vscode/settings.json
 !.vscode/tasks.json
