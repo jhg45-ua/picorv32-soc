@@ -1,4 +1,5 @@
 # Read Verilog RTL sources
+read_verilog rtl/common/tmr_voter.v
 read_verilog rtl/cores/picorv32.v
 read_verilog rtl/periph/simpleuart.v
 read_verilog rtl/soc/system.v

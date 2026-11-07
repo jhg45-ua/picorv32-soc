@@ -78,7 +78,7 @@ upload: app
 # RTL Simulation (using Vivado xvlog/xelab)
 # -------------------------------------------------------------
 sim: $(BUILD_DIR)/firmware.hex
-	$(XVLOG) rtl/cores/picorv32.v rtl/periph/simpleuart.v rtl/soc/system.v sim/system_tb.v
+	$(XVLOG) rtl/common/tmr_voter.v rtl/cores/picorv32.v rtl/periph/simpleuart.v rtl/soc/system.v sim/system_tb.v
 	$(XVLOG) $(GLBL)
 	$(XELAB) -L unifast_ver -L unisims_ver -R system_tb glbl
 
@@ -86,11 +86,11 @@ sim: $(BUILD_DIR)/firmware.hex
 # RTL Simulation (using Icarus Verilog)
 # -------------------------------------------------------------
 sim-iverilog: $(BUILD_DIR)/firmware.hex $(BUILD_DIR)
-	$(IVERILOG) -o $(BUILD_DIR)/simv rtl/cores/picorv32.v rtl/periph/simpleuart.v rtl/soc/system.v sim/system_tb.v
+	$(IVERILOG) -o $(BUILD_DIR)/simv rtl/common/tmr_voter.v rtl/cores/picorv32.v rtl/periph/simpleuart.v rtl/soc/system.v sim/system_tb.v
 	$(VVP) $(BUILD_DIR)/simv
 
 sim-waves: $(BUILD_DIR)/firmware.hex $(BUILD_DIR)
-	$(IVERILOG) -o $(BUILD_DIR)/simv rtl/cores/picorv32.v rtl/periph/simpleuart.v rtl/soc/system.v sim/system_tb.v
+	$(IVERILOG) -o $(BUILD_DIR)/simv rtl/common/tmr_voter.v rtl/cores/picorv32.v rtl/periph/simpleuart.v rtl/soc/system.v sim/system_tb.v
 	$(VVP) -n $(BUILD_DIR)/simv +vcd
 
 viewer:
@@ -118,7 +118,7 @@ prog:
 # -------------------------------------------------------------
 lint:
 	$(VERILATOR) -sv --lint-only -Wall \
-		-y rtl/cores -y rtl/periph -y rtl/soc \
+		-y rtl/common -y rtl/cores -y rtl/periph -y rtl/soc \
 		-Wno-UNUSEDSIGNAL -Wno-PINCONNECTEMPTY -Wno-BLKSEQ -Wno-DECLFILENAME -Wno-GENUNNAMED -Wno-MULTITOP \
 		rtl/soc/system.v
 
