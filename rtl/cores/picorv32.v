@@ -58,6 +58,8 @@
 `ifdef PICORV32_TMR
   `define PICORV32_TMR_FSM
   `define PICORV32_TMR_PC
+  `define PICORV32_TMR_CTRL
+  `define PICORV32_TMR_MEM
 `endif
 
 // [TMR Hardening] Macro for FSM state assignments:
@@ -87,6 +89,28 @@
     reg_next_pc_a <= (val); \
     reg_next_pc_b <= (val); \
     reg_next_pc_c <= (val); \
+  end
+`endif
+
+// [TMR Hardening] Macro for latched_rd (destination register):
+`ifndef PICORV32_TMR_CTRL
+  `define SET_LATCHED_RD(val) latched_rd <= (val)
+`else
+  `define SET_LATCHED_RD(val) begin \
+    latched_rd_a <= (val); \
+    latched_rd_b <= (val); \
+    latched_rd_c <= (val); \
+  end
+`endif
+
+// [TMR Hardening] Macro for mem_state (memory bus FSM):
+`ifndef PICORV32_TMR_MEM
+  `define SET_MEM_STATE(val) mem_state <= (val)
+`else
+  `define SET_MEM_STATE(val) begin \
+    mem_state_a <= (val); \
+    mem_state_b <= (val); \
+    mem_state_c <= (val); \
   end
 `endif
 
@@ -422,7 +446,26 @@ module picorv32 #(
 
     // Memory Interface
 
+    // [TMR Hardening] Memory State FSM declaration (2 bits):
+`ifndef PICORV32_TMR_MEM
     reg [1:0] mem_state;
+`else
+    (* keep = "true", syn_keep = "true" *) reg [1:0] mem_state_a;
+    (* keep = "true", syn_keep = "true" *) reg [1:0] mem_state_b;
+    (* keep = "true", syn_keep = "true" *) reg [1:0] mem_state_c;
+    wire [1:0] mem_state;
+    wire       mem_state_fault_detected;
+
+    tmr_voter #(
+        .WIDTH(2)
+    ) u_voter_mem_state (
+        .in_a(mem_state_a),
+        .in_b(mem_state_b),
+        .in_c(mem_state_c),
+        .out (mem_state),
+        .fault_detected(mem_state_fault_detected)
+    );
+`endif
     reg [1:0] mem_wordsize;
     reg [31:0] mem_rdata_word;
     reg [31:0] mem_rdata_q;
@@ -639,12 +682,18 @@ module picorv32 #(
     always @(posedge clk) begin
         if (!resetn || trap) begin
             if (!resetn)
-                mem_state <= 0;
+                `SET_MEM_STATE(0);
             if (!resetn || mem_ready)
                 mem_valid <= 0;
             mem_la_secondword <= 0;
             prefetched_high_word <= 0;
         end else begin
+            // [TMR Hardening] Self-healing feedback for memory bus FSM
+`ifdef PICORV32_TMR_MEM
+            mem_state_a <= mem_state;
+            mem_state_b <= mem_state;
+            mem_state_c <= mem_state;
+`endif
             if (mem_la_read || mem_la_write) begin
                 mem_addr <= mem_la_addr;
                 mem_wstrb <= mem_la_wstrb & {4{mem_la_write}};
@@ -658,12 +707,12 @@ module picorv32 #(
                         mem_valid <= !mem_la_use_prefetched_high_word;
                         mem_instr <= mem_do_prefetch || mem_do_rinst;
                         mem_wstrb <= 0;
-                        mem_state <= 1;
+                        `SET_MEM_STATE(1);
                     end
                     if (mem_do_wdata) begin
                         mem_valid <= 1;
                         mem_instr <= 0;
-                        mem_state <= 2;
+                        `SET_MEM_STATE(2);
                     end
                 end
                 1: begin
@@ -688,7 +737,7 @@ module picorv32 #(
                                     prefetched_high_word <= 0;
                                 end
                             end
-                            mem_state <= mem_do_rinst || mem_do_rdata ? 0 : 3;
+                            `SET_MEM_STATE(mem_do_rinst || mem_do_rdata ? 0 : 3);
                         end
                     end
                 end
@@ -697,14 +746,14 @@ module picorv32 #(
                     `assert(mem_do_wdata);
                     if (mem_xfer) begin
                         mem_valid <= 0;
-                        mem_state <= 0;
+                        `SET_MEM_STATE(0);
                     end
                 end
                 3: begin
                     `assert(mem_wstrb == 0);
                     `assert(mem_do_prefetch);
                     if (mem_do_rinst) begin
-                        mem_state <= 0;
+                        `SET_MEM_STATE(0);
                     end
                 end
             endcase
@@ -1302,7 +1351,26 @@ module picorv32 #(
     reg latched_is_lu;
     reg latched_is_lh;
     reg latched_is_lb;
+    // [TMR Hardening] Destination register address (latched_rd):
+`ifndef PICORV32_TMR_CTRL
     reg [regindex_bits-1:0] latched_rd;
+`else
+    (* keep = "true", syn_keep = "true" *) reg [regindex_bits-1:0] latched_rd_a;
+    (* keep = "true", syn_keep = "true" *) reg [regindex_bits-1:0] latched_rd_b;
+    (* keep = "true", syn_keep = "true" *) reg [regindex_bits-1:0] latched_rd_c;
+    wire [regindex_bits-1:0] latched_rd;
+    wire                     latched_rd_fault_detected;
+
+    tmr_voter #(
+        .WIDTH(regindex_bits)
+    ) u_voter_latched_rd (
+        .in_a(latched_rd_a),
+        .in_b(latched_rd_b),
+        .in_c(latched_rd_c),
+        .out (latched_rd),
+        .fault_detected(latched_rd_fault_detected)
+    );
+`endif
 
     reg [31:0] current_pc;
     assign next_pc = latched_store && latched_branch ? reg_out & ~1 : reg_next_pc;
@@ -1566,6 +1634,11 @@ module picorv32 #(
         reg_next_pc_b <= reg_next_pc;
         reg_next_pc_c <= reg_next_pc;
 `endif
+`ifdef PICORV32_TMR_CTRL
+        latched_rd_a <= latched_rd;
+        latched_rd_b <= latched_rd;
+        latched_rd_c <= latched_rd;
+`endif
 
         if (!resetn) begin
             `SET_REG_PC(PROGADDR_RESET);
@@ -1590,7 +1663,7 @@ module picorv32 #(
             timer <= 0;
             if (~STACKADDR) begin
                 latched_store <= 1;
-                latched_rd <= 2;
+                `SET_LATCHED_RD(2);
                 reg_out <= STACKADDR;
             end
             `SET_CPU_STATE(cpu_state_fetch);
@@ -1645,7 +1718,7 @@ module picorv32 #(
                 latched_is_lu <= 0;
                 latched_is_lh <= 0;
                 latched_is_lb <= 0;
-                latched_rd <= decoded_rd;
+                `SET_LATCHED_RD(decoded_rd);
                 latched_compr <= compressed_instr;
 
                 if (ENABLE_IRQ && ((decoder_trigger && !irq_active && !irq_delay && |(irq_pending & ~irq_mask)) || irq_state)) begin
@@ -1653,10 +1726,11 @@ module picorv32 #(
                         irq_state == 2'b00 ? 2'b01 :
                         irq_state == 2'b01 ? 2'b10 : 2'b00;
                     latched_compr <= latched_compr;
-                    if (ENABLE_IRQ_QREGS)
-                        latched_rd <= irqregs_offset | irq_state[0];
-                    else
-                        latched_rd <= irq_state[0] ? 4 : 3;
+                    if (ENABLE_IRQ_QREGS) begin
+                        `SET_LATCHED_RD(irqregs_offset | irq_state[0]);
+                    end else begin
+                        `SET_LATCHED_RD(irq_state[0] ? 4 : 3);
+                    end
                 end else
                 if (ENABLE_IRQ && (decoder_trigger || do_waitirq) && instr_waitirq) begin
                     if (irq_pending) begin
@@ -1773,7 +1847,7 @@ module picorv32 #(
                         reg_out <= cpuregs_rs1;
                         dbg_rs1val <= cpuregs_rs1;
                         dbg_rs1val_valid <= 1;
-                        latched_rd <= latched_rd | irqregs_offset;
+                        `SET_LATCHED_RD(latched_rd | irqregs_offset);
                         latched_store <= 1;
                         `SET_CPU_STATE(cpu_state_fetch);
                     end
@@ -1922,7 +1996,7 @@ module picorv32 #(
                     alu_wait <= alu_wait_2;
                 end else
                 if (is_beq_bne_blt_bge_bltu_bgeu) begin
-                    latched_rd <= 0;
+                    `SET_LATCHED_RD(0);
                     latched_store <= TWO_CYCLE_COMPARE ? alu_out_0_q : alu_out_0;
                     latched_branch <= TWO_CYCLE_COMPARE ? alu_out_0_q : alu_out_0;
                     if (mem_done)
