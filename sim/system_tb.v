@@ -108,6 +108,108 @@ module system_tb;
   end
 `endif
 
+`ifdef PICORV32_TMR_RD
+  // -------------------------------------------------------------
+  // TMR Destination Register (latched_rd) Fault Injection Test
+  // Injects an SEU into latched_rd_a and verifies that the voter
+  // masks the corrupt register index and heals the branch.
+  // -------------------------------------------------------------
+  initial begin
+    repeat (70000) @(posedge clk);
+
+    $display("========================================================");
+    $display("[TMR RD TEST] Starting Destination Reg SEU Fault Injection");
+    $display("========================================================");
+
+    if (uut.cpu.rd_fault_detected) begin
+      $display("[TMR RD TEST] ERROR: Discrepancy already present in latched_rd before injection!");
+    end
+
+    @(posedge clk);
+    $display("[TMR RD TEST] [%0t ns] Injecting SEU: forcing latched_rd_a = 5'd31...", $time);
+    $display("[TMR RD TEST] Pre-SEU  rd: A=%0d, B=%0d, C=%0d -> Voted=%0d",
+             uut.cpu.latched_rd_a, uut.cpu.latched_rd_b, uut.cpu.latched_rd_c, uut.cpu.latched_rd);
+
+    force uut.cpu.latched_rd_a = 5'd31;
+    #1;
+
+    if (uut.cpu.rd_fault_detected && (uut.cpu.latched_rd != 5'd31)) begin
+      $display("[TMR RD TEST] SUCCESS: Voter masked rd fault! Core sees Voted=%0d (NOT 31)", uut.cpu.latched_rd);
+      $display("[TMR RD TEST] SUCCESS: Telemetry flag asserted (rd_fault_detected = 1)");
+      $display("[TMR RD TEST] Mid-SEU  rd: A=%0d, B=%0d, C=%0d -> Voted=%0d",
+               uut.cpu.latched_rd_a, uut.cpu.latched_rd_b, uut.cpu.latched_rd_c, uut.cpu.latched_rd);
+    end else begin
+      $display("[TMR RD TEST] FAILURE: RD voter did not mask fault or flag was not set!");
+    end
+
+    @(posedge clk);
+    release uut.cpu.latched_rd_a;
+    @(posedge clk);
+    #1;
+
+    if (!uut.cpu.rd_fault_detected && (uut.cpu.latched_rd_a == uut.cpu.latched_rd_b)) begin
+      $display("[TMR RD TEST] SUCCESS: Self-healing verified! Branch A rd recovered to %0d", uut.cpu.latched_rd_a);
+      $display("[TMR RD TEST] Telemetry cleared: rd_fault_detected = 0");
+    end else begin
+      $display("[TMR RD TEST] FAILURE: Self-healing failed! Branch A rd did not recover: A=%0d, B=%0d",
+               uut.cpu.latched_rd_a, uut.cpu.latched_rd_b);
+    end
+
+    $display("========================================================\n");
+  end
+`endif
+
+`ifdef PICORV32_TMR_MEM
+  // -------------------------------------------------------------
+  // TMR Memory FSM (mem_state) Fault Injection Test
+  // Injects an SEU into mem_state_a and verifies that the voter
+  // masks the corrupt state and heals the branch.
+  // -------------------------------------------------------------
+  initial begin
+    repeat (80000) @(posedge clk);
+
+    $display("========================================================");
+    $display("[TMR MEM TEST] Starting Memory FSM SEU Fault Injection");
+    $display("========================================================");
+
+    if (uut.cpu.mem_fault_detected) begin
+      $display("[TMR MEM TEST] ERROR: Discrepancy already present in mem_state before injection!");
+    end
+
+    @(posedge clk);
+    $display("[TMR MEM TEST] [%0t ns] Injecting SEU: forcing mem_state_a = 2'b11...", $time);
+    $display("[TMR MEM TEST] Pre-SEU  mem_state: A=%b, B=%b, C=%b -> Voted=%b",
+             uut.cpu.mem_state_a, uut.cpu.mem_state_b, uut.cpu.mem_state_c, uut.cpu.mem_state);
+
+    force uut.cpu.mem_state_a = 2'b11;
+    #1;
+
+    if (uut.cpu.mem_fault_detected && (uut.cpu.mem_state != 2'b11)) begin
+      $display("[TMR MEM TEST] SUCCESS: Voter masked mem_state fault! Core sees Voted=%b", uut.cpu.mem_state);
+      $display("[TMR MEM TEST] SUCCESS: Telemetry flag asserted (mem_fault_detected = 1)");
+      $display("[TMR MEM TEST] Mid-SEU  mem_state: A=%b, B=%b, C=%b -> Voted=%b",
+               uut.cpu.mem_state_a, uut.cpu.mem_state_b, uut.cpu.mem_state_c, uut.cpu.mem_state);
+    end else begin
+      $display("[TMR MEM TEST] FAILURE: MEM voter did not mask fault or flag was not set!");
+    end
+
+    @(posedge clk);
+    release uut.cpu.mem_state_a;
+    @(posedge clk);
+    #1;
+
+    if (!uut.cpu.mem_fault_detected && (uut.cpu.mem_state_a == uut.cpu.mem_state_b)) begin
+      $display("[TMR MEM TEST] SUCCESS: Self-healing verified! Branch A mem_state recovered to %b", uut.cpu.mem_state_a);
+      $display("[TMR MEM TEST] Telemetry cleared: mem_fault_detected = 0");
+    end else begin
+      $display("[TMR MEM TEST] FAILURE: Self-healing failed! Branch A mem_state did not recover: A=%b, B=%b",
+               uut.cpu.mem_state_a, uut.cpu.mem_state_b);
+    end
+
+    $display("========================================================\n");
+  end
+`endif
+
 `ifdef PICORV32_TMR_PC
   // -------------------------------------------------------------
   // TMR PC Fault Injection Test
@@ -163,6 +265,7 @@ module system_tb;
     $display("========================================================\n");
   end
 `endif
+
   // Simulation timeout and trap check
   initial begin
     repeat (1000000) @(posedge clk);
