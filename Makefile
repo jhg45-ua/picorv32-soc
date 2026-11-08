@@ -12,6 +12,11 @@ BUILD_DIR ?= build
 PORT      ?= /dev/ttyUSB1
 APP       ?= counter
 
+# Source file C for base firmware (initialized in BRAM in 0x0)
+# Change this variable to compile another app as base firmware:
+# ex: FW_SRC ?= sw/apps/counter.c
+FW_SRC    ?= sw/bootloader/bootloader.c
+
 # TMR mode (0: standard, 1: triplicated)
 TMR        ?= 0
 TMR_SUFFIX := $(if $(filter 1,$(TMR)),_tmr,)
@@ -31,8 +36,8 @@ LIBS       := -lgcc
 # -------------------------------------------------------------
 help:
 	@echo "Available commands:"
-	@echo "  make fw          - Compile firmware bootloader (firmware.hex)"
-	@echo "  make app         - Compile app (ej: make app APP=counter)"
+	@echo "  make fw          - Compile base firmware (firmware.hex a partir de FW_SRC)"
+	@echo "  make app         - Compile app (ex: make app APP=counter)"
 	@echo "  make upload      - Upload app via UART to the board"
 	@echo "  make sim         - Simulate SoC (Icarus Verilog)"
 	@echo "  make sim-tmr     - Simulate with TMR and fault injection tests"
@@ -50,17 +55,20 @@ $(BUILD_DIR):
 # -------------------------------------------------------------
 # Firmware RISC-V
 # -------------------------------------------------------------
-fw: $(BUILD_DIR)/firmware.hex
+fw:
+	@rm -f $(BUILD_DIR)/firmware.hex
+	@$(MAKE) $(BUILD_DIR)/firmware.hex FW_SRC="$(FW_SRC)"
 
-$(BUILD_DIR)/firmware.hex: sw/common/firmware.S sw/bootloader/bootloader.c sw/common/firmware.lds $(BUILD_DIR)
-	@echo "[CC] Compilando bootloader..."
-	@$(TOOLCHAIN)gcc $(CFLAGS) sw/common/firmware.S sw/bootloader/bootloader.c \
-		$(LDFLAGS),--defsym=ORG=0x0,-Map,$(BUILD_DIR)/bootloader.map $(LIBS) -o $(BUILD_DIR)/bootloader.elf
-	@$(TOOLCHAIN)objcopy -O binary $(BUILD_DIR)/bootloader.elf $(BUILD_DIR)/bootloader.bin
-	@python3 sw/common/makehex.py $(BUILD_DIR)/bootloader.bin 4096 > $@
+$(BUILD_DIR)/firmware.hex: sw/common/firmware.S $(FW_SRC) sw/common/firmware.lds Makefile | $(BUILD_DIR)
+	@echo "[CC] Compiling $(FW_SRC) as base firmware (ORG=0x0)..."
+	@$(TOOLCHAIN)gcc $(CFLAGS) sw/common/firmware.S $(FW_SRC) \
+		$(LDFLAGS),--defsym=ORG=0x0,-Map,$(BUILD_DIR)/firmware.map $(LIBS) -o $(BUILD_DIR)/firmware.elf
+	@$(TOOLCHAIN)objcopy -O binary $(BUILD_DIR)/firmware.elf $(BUILD_DIR)/firmware.bin
+	@python3 sw/common/makehex.py $(BUILD_DIR)/firmware.bin 4096 > $@
+	@echo "[OK] Firmware generated in $@"
 
 app: $(BUILD_DIR)
-	@echo "[CC] Compilando $(APP).c..."
+	@echo "[CC] Compiling $(APP).c..."
 	@$(TOOLCHAIN)gcc $(CFLAGS) sw/common/firmware.S sw/apps/$(APP).c \
 		$(LDFLAGS),--defsym=ORG=0x800,-Map,$(BUILD_DIR)/$(APP).map $(LIBS) -o $(BUILD_DIR)/$(APP).elf
 	@$(TOOLCHAIN)objcopy -O binary $(BUILD_DIR)/$(APP).elf $(BUILD_DIR)/$(APP).bin
@@ -88,10 +96,10 @@ sim-waves: $(BUILD_DIR)/firmware.hex $(BUILD_DIR)
 # Synth Vivado (Batch mode)
 # -------------------------------------------------------------
 synth: $(BUILD_DIR)/firmware.hex $(BUILD_DIR)
-	@echo "[VIVADO] Sintetizando (TMR=$(TMR))..."
+	@echo "[VIVADO] Synthesizing (TMR=$(TMR))..."
 	@TMR=$(TMR) $(VIVADO) -nojournal -log $(BUILD_DIR)/synth$(TMR_SUFFIX).log -mode batch \
 		-source boards/nexys_a7_100T/synth_system.tcl -tclargs TMR=$(TMR)
-	@echo "[OK] Bitstream generado en $(BITSTREAM)"
+	@echo "[OK] Bitstream generated in $(BITSTREAM)"
 	@grep -B2 -A8 "Slice LUTs" $(BUILD_DIR)/utilization_system$(TMR_SUFFIX).rpt 2>/dev/null || true
 
 synth-tmr:
@@ -122,6 +130,6 @@ lint:
 
 clean:
 	@rm -rf $(BUILD_DIR) .Xil/ *.jou *.log xsim.dir/ xvlog.* xelab.* webtalk* *.vcd
-	@echo "[OK] Directorio limpio."
+	@echo "[OK] Directory cleaned."
 
 .PHONY: help fw app upload sim sim-tmr sim-waves synth synth-tmr prog prog-tmr prog-ofl prog-ofl-tmr lint clean
