@@ -14,8 +14,8 @@ APP       ?= counter
 
 # Source file C for base firmware (initialized in BRAM in 0x0)
 # Change this variable to compile another app as base firmware:
-# ex: FW_SRC ?= sw/apps/counter.c
-FW_SRC    ?= sw/bootloader/bootloader.c
+# ex: FW_SRC ?= sw/bootloader/bootloader.c
+FW_SRC    ?= sw/apps/counter.c
 
 # TMR mode (0: standard, 1: triplicated)
 TMR        ?= 0
@@ -79,15 +79,15 @@ upload: app
 # -------------------------------------------------------------
 # RTL Simulation (Icarus Verilog)
 # -------------------------------------------------------------
-sim: $(BUILD_DIR)/firmware.hex $(BUILD_DIR)
+sim: fw
 	$(IVERILOG) -o $(BUILD_DIR)/simv $(RTL_SRCS) $(TB_SRCS)
 	$(VVP) $(BUILD_DIR)/simv
 
-sim-tmr: $(BUILD_DIR)/firmware.hex $(BUILD_DIR)
+sim-tmr: fw
 	$(IVERILOG) -DPICORV32_TMR -o $(BUILD_DIR)/simv_tmr $(RTL_SRCS) $(TB_SRCS)
 	$(VVP) $(BUILD_DIR)/simv_tmr
 
-sim-waves: $(BUILD_DIR)/firmware.hex $(BUILD_DIR)
+sim-waves: fw
 	$(IVERILOG) -o $(BUILD_DIR)/simv $(RTL_SRCS) $(TB_SRCS)
 	$(VVP) -n $(BUILD_DIR)/simv +vcd
 	surfer system.vcd
@@ -95,7 +95,7 @@ sim-waves: $(BUILD_DIR)/firmware.hex $(BUILD_DIR)
 # -------------------------------------------------------------
 # Synth Vivado (Batch mode)
 # -------------------------------------------------------------
-synth: $(BUILD_DIR)/firmware.hex $(BUILD_DIR)
+synth: fw
 	@echo "[VIVADO] Synthesizing (TMR=$(TMR))..."
 	@TMR=$(TMR) $(VIVADO) -nojournal -log $(BUILD_DIR)/synth$(TMR_SUFFIX).log -mode batch \
 		-source boards/nexys_a7_100T/synth_system.tcl -tclargs TMR=$(TMR)
