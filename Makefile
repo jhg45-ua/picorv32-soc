@@ -22,6 +22,8 @@ SURFER           ?= surfer
 BUILD_DIR = build
 APP	     ?= counter
 PORT     ?= /dev/ttyUSB1
+TMR      ?= 0
+BITSTREAM ?= prebuilt/system$$( [ "$(TMR)" = "1" ] && echo "_tmr" ).bit
 
 help:
 	@echo "Available commands:"
@@ -32,7 +34,9 @@ help:
 	@echo "  make sim-waves    - Run behavioral simulation with Icarus Verilog and generate waveform.vcd"
 	@echo "  make viewer       - Open waveform.vcd in GTKWave"
 	@echo "  make synth        - Run non-project batch synthesis & generate system.bit"
-	@echo "  make prog         - Program the Nexys A7-100T FPGA over JTAG"
+	@echo "  make synth-tmr    - Run synthesis with TMR enabled & generate system_tmr.bit"
+	@echo "  make prog         - Program the Nexys A7-100T FPGA over JTAG (default: system.bit)"
+	@echo "  make prog-tmr     - Program the Nexys A7-100T FPGA over JTAG with system_tmr.bit"
 	@echo "  make lint         - Run Verilator linting on the RTL"
 	@echo "  make clean        - Remove build artifacts and logs"
 
@@ -105,18 +109,31 @@ viewer:
 # FPGA Bitstream Synthesis (using Vivado non-project batch mode)
 # -------------------------------------------------------------
 synth: $(BUILD_DIR)/firmware.hex $(BUILD_DIR)
-	@printf "$(YELLOW)[VIVADO]$(RESET) Running synthesis in batch mode...\n"
+	@printf "$(YELLOW)[VIVADO]$(RESET) Running synthesis in batch mode (TMR=$(TMR))...\n"
 
-	$(VIVADO) -nojournal -log $(BUILD_DIR)/synth.log -mode batch -source boards/nexys_a7_100T/synth_system.tcl
+	TMR=$(TMR) $(VIVADO) -nojournal -log $(BUILD_DIR)/synth$$( [ "$(TMR)" = "1" ] && echo "_tmr" ).log -mode batch \
+		-source boards/nexys_a7_100T/synth_system.tcl -tclargs TMR=$(TMR)
 
-	@printf "$(GREEN)[OK]$(RESET)     Synthesis completed! Bitstream is in prebuilt/system.bit\n"
-	@grep -B2 -A8 "Slice LUTs" $(BUILD_DIR)/utilization.rpt || true
+	@printf "$(GREEN)[OK]$(RESET)     Synthesis completed!\n"
+	@if [ "$(TMR)" = "1" ]; then \
+		echo "Bitstream is in prebuilt/system_tmr.bit"; \
+		grep -B2 -A8 "Slice LUTs" $(BUILD_DIR)/utilization_system_tmr.rpt 2>/dev/null || true; \
+	else \
+		echo "Bitstream is in prebuilt/system.bit"; \
+		grep -B2 -A8 "Slice LUTs" $(BUILD_DIR)/utilization_system.rpt 2>/dev/null || true; \
+	fi
+
+synth-tmr:
+	@$(MAKE) synth TMR=1
 
 # -------------------------------------------------------------
 # FPGA JTAG Programming (using Vivado hw-manager)
 # -------------------------------------------------------------
 prog:
-	$(VIVADO) -nojournal -mode batch -source boards/nexys_a7_100T/prog.tcl
+	BITSTREAM=$(BITSTREAM) $(VIVADO) -nojournal -mode batch -source boards/nexys_a7_100T/prog.tcl
+
+prog-tmr:
+	@$(MAKE) prog BITSTREAM=prebuilt/system_tmr.bit
 
 # -------------------------------------------------------------
 # Linting (using Verilator)
@@ -134,4 +151,4 @@ clean:
 
 	@printf "$(GREEN)[OK]$(RESET)     Clean completed!\n"
 
-.PHONY: help fw sim sim-iverilog sim-tmr synth prog clean
+.PHONY: help fw sim sim-iverilog sim-tmr synth synth-tmr prog prog-tmr lint clean
