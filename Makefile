@@ -6,7 +6,7 @@ VIVADO    ?= vivado
 IVERILOG  ?= iverilog -g2012
 VVP       ?= vvp
 VERILATOR ?= verilator
-OFL       ?= openFPGALoader -b nexysA7100t
+OFL       ?= openFPGALoader -b nexys_a7_100
 
 BUILD_DIR ?= build
 PORT      ?= /dev/ttyUSB1
