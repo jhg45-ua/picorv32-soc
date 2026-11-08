@@ -78,11 +78,12 @@ module system_tb;
              uut.cpu.cpu_state_a, uut.cpu.cpu_state_b, uut.cpu.cpu_state_c, uut.cpu.cpu_state);
 
     force uut.cpu.cpu_state_a = 8'h80;
-    #1; // Allow combinational propagation
+    #1;  // Allow combinational propagation
 
     // 3. Verify voter masking and fault detection
     if (uut.cpu.fsm_fault_detected && (uut.cpu.cpu_state != 8'h80)) begin
-      $display("[TMR TEST] SUCCESS: Voter masked the fault! Core sees Voted=0x%02h (NOT trap)", uut.cpu.cpu_state);
+      $display("[TMR TEST] SUCCESS: Voter masked the fault! Core sees Voted=0x%02h (NOT trap)",
+               uut.cpu.cpu_state);
       $display("[TMR TEST] SUCCESS: Telemetry flag asserted (fsm_fault_detected = 1)");
       $display("[TMR TEST] Mid-SEU  State: A=0x%02h, B=0x%02h, C=0x%02h -> Voted=0x%02h",
                uut.cpu.cpu_state_a, uut.cpu.cpu_state_b, uut.cpu.cpu_state_c, uut.cpu.cpu_state);
@@ -97,11 +98,13 @@ module system_tb;
     #1;
 
     if (!uut.cpu.fsm_fault_detected && (uut.cpu.cpu_state_a == uut.cpu.cpu_state_b)) begin
-      $display("[TMR TEST] SUCCESS: Self-healing feedback verified! Branch A recovered to 0x%02h", uut.cpu.cpu_state_a);
+      $display("[TMR TEST] SUCCESS: Self-healing feedback verified! Branch A recovered to 0x%02h",
+               uut.cpu.cpu_state_a);
       $display("[TMR TEST] Telemetry cleared: fsm_fault_detected = 0");
     end else begin
-      $display("[TMR TEST] FAILURE: Self-healing failed! Branch A did not recover: A=0x%02h, B=0x%02h",
-               uut.cpu.cpu_state_a, uut.cpu.cpu_state_b);
+      $display(
+          "[TMR TEST] FAILURE: Self-healing failed! Branch A did not recover: A=0x%02h, B=0x%02h",
+          uut.cpu.cpu_state_a, uut.cpu.cpu_state_b);
     end
 
     $display("========================================================\n");
@@ -127,17 +130,19 @@ module system_tb;
 
     @(posedge clk);
     $display("[TMR CTRL TEST] [%0t ns] Injecting SEU: forcing latched_rd_a = 5'd31...", $time);
-    $display("[TMR CTRL TEST] Pre-SEU  RD: A=%0d, B=%0d, C=%0d -> Voted=%0d",
-             uut.cpu.latched_rd_a, uut.cpu.latched_rd_b, uut.cpu.latched_rd_c, uut.cpu.latched_rd);
+    $display("[TMR CTRL TEST] Pre-SEU  RD: A=%0d, B=%0d, C=%0d -> Voted=%0d", uut.cpu.latched_rd_a,
+             uut.cpu.latched_rd_b, uut.cpu.latched_rd_c, uut.cpu.latched_rd);
 
     force uut.cpu.latched_rd_a = 5'd31;
     #1;
 
     if (uut.cpu.latched_rd_fault_detected && (uut.cpu.latched_rd != 5'd31)) begin
-      $display("[TMR CTRL TEST] SUCCESS: Voter masked RD fault! Core sees Voted=%0d", uut.cpu.latched_rd);
+      $display("[TMR CTRL TEST] SUCCESS: Voter masked RD fault! Core sees Voted=%0d",
+               uut.cpu.latched_rd);
       $display("[TMR CTRL TEST] SUCCESS: Telemetry flag asserted (latched_rd_fault_detected = 1)");
       $display("[TMR CTRL TEST] Mid-SEU  RD: A=%0d, B=%0d, C=%0d -> Voted=%0d",
-               uut.cpu.latched_rd_a, uut.cpu.latched_rd_b, uut.cpu.latched_rd_c, uut.cpu.latched_rd);
+               uut.cpu.latched_rd_a, uut.cpu.latched_rd_b, uut.cpu.latched_rd_c,
+               uut.cpu.latched_rd);
     end else begin
       $display("[TMR CTRL TEST] FAILURE: Voter did not mask fault or flag was not set!");
     end
@@ -148,11 +153,12 @@ module system_tb;
     #1;
 
     if (!uut.cpu.latched_rd_fault_detected && (uut.cpu.latched_rd_a == uut.cpu.latched_rd_b)) begin
-      $display("[TMR CTRL TEST] SUCCESS: Self-healing verified! Branch A RD recovered to %0d", uut.cpu.latched_rd_a);
+      $display("[TMR CTRL TEST] SUCCESS: Self-healing verified! Branch A RD recovered to %0d",
+               uut.cpu.latched_rd_a);
       $display("[TMR CTRL TEST] Telemetry cleared: latched_rd_fault_detected = 0");
     end else begin
-      $display("[TMR CTRL TEST] FAILURE: Self-healing failed! A=%0d, B=%0d",
-               uut.cpu.latched_rd_a, uut.cpu.latched_rd_b);
+      $display("[TMR CTRL TEST] FAILURE: Self-healing failed! A=%0d, B=%0d", uut.cpu.latched_rd_a,
+               uut.cpu.latched_rd_b);
     end
 
     $display("========================================================\n");
@@ -185,7 +191,8 @@ module system_tb;
     #1;
 
     if (uut.cpu.mem_state_fault_detected && (uut.cpu.mem_state != 2'b11)) begin
-      $display("[TMR MEM TEST] SUCCESS: Voter masked mem_state fault! Core sees Voted=%0d", uut.cpu.mem_state);
+      $display("[TMR MEM TEST] SUCCESS: Voter masked mem_state fault! Core sees Voted=%0d",
+               uut.cpu.mem_state);
       $display("[TMR MEM TEST] SUCCESS: Telemetry flag asserted (mem_state_fault_detected = 1)");
       $display("[TMR MEM TEST] Mid-SEU  MEM_STATE: A=%0d, B=%0d, C=%0d -> Voted=%0d",
                uut.cpu.mem_state_a, uut.cpu.mem_state_b, uut.cpu.mem_state_c, uut.cpu.mem_state);
@@ -199,11 +206,12 @@ module system_tb;
     #1;
 
     if (!uut.cpu.mem_state_fault_detected && (uut.cpu.mem_state_a == uut.cpu.mem_state_b)) begin
-      $display("[TMR MEM TEST] SUCCESS: Self-healing verified! Branch A mem_state recovered to %0d", uut.cpu.mem_state_a);
+      $display("[TMR MEM TEST] SUCCESS: Self-healing verified! Branch A mem_state recovered to %0d",
+               uut.cpu.mem_state_a);
       $display("[TMR MEM TEST] Telemetry cleared: mem_state_fault_detected = 0");
     end else begin
-      $display("[TMR MEM TEST] FAILURE: Self-healing failed! A=%0d, B=%0d",
-               uut.cpu.mem_state_a, uut.cpu.mem_state_b);
+      $display("[TMR MEM TEST] FAILURE: Self-healing failed! A=%0d, B=%0d", uut.cpu.mem_state_a,
+               uut.cpu.mem_state_b);
     end
 
     $display("========================================================\n");
@@ -240,7 +248,8 @@ module system_tb;
 
     // 3. Verify voter masking and fault detection
     if (uut.cpu.pc_fault_detected && (uut.cpu.reg_pc != 32'hdead0000)) begin
-      $display("[TMR PC TEST] SUCCESS: Voter masked PC fault! Core sees Voted=0x%08h", uut.cpu.reg_pc);
+      $display("[TMR PC TEST] SUCCESS: Voter masked PC fault! Core sees Voted=0x%08h",
+               uut.cpu.reg_pc);
       $display("[TMR PC TEST] SUCCESS: Telemetry flag asserted (pc_fault_detected = 1)");
       $display("[TMR PC TEST] Mid-SEU  PC: A=0x%08h, B=0x%08h, C=0x%08h -> Voted=0x%08h",
                uut.cpu.reg_pc_a, uut.cpu.reg_pc_b, uut.cpu.reg_pc_c, uut.cpu.reg_pc);
@@ -255,11 +264,13 @@ module system_tb;
     #1;
 
     if (!uut.cpu.pc_fault_detected && (uut.cpu.reg_pc_a == uut.cpu.reg_pc_b)) begin
-      $display("[TMR PC TEST] SUCCESS: Self-healing verified! Branch A PC recovered to 0x%08h", uut.cpu.reg_pc_a);
+      $display("[TMR PC TEST] SUCCESS: Self-healing verified! Branch A PC recovered to 0x%08h",
+               uut.cpu.reg_pc_a);
       $display("[TMR PC TEST] Telemetry cleared: pc_fault_detected = 0");
     end else begin
-      $display("[TMR PC TEST] FAILURE: Self-healing failed! Branch A PC did not recover: A=0x%08h, B=0x%08h",
-               uut.cpu.reg_pc_a, uut.cpu.reg_pc_b);
+      $display(
+          "[TMR PC TEST] FAILURE: Self-healing failed! Branch A PC did not recover: A=0x%08h, B=0x%08h",
+          uut.cpu.reg_pc_a, uut.cpu.reg_pc_b);
     end
 
     $display("========================================================\n");
@@ -268,7 +279,7 @@ module system_tb;
 
   // Simulation timeout and trap check
   initial begin
-    repeat (1000000) @(posedge clk);
+    repeat (4000000) @(posedge clk);
     $display("\n[SIMULATION DONE] Timeout reached safely.");
     $finish;
   end

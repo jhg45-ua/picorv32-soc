@@ -23,7 +23,7 @@ TMR_SUFFIX := $(if $(filter 1,$(TMR)),_tmr,)
 BITSTREAM  ?= prebuilt/system$(TMR_SUFFIX).bit
 
 # RTL sources (common, cores, peripherals, SoC)
-RTL_SRCS   := rtl/common/tmr_voter.v rtl/cores/picorv32.v rtl/periph/simpleuart.v rtl/soc/system.v
+RTL_SRCS   := rtl/common/tmr_voter.v rtl/common/ecc_secded32_enc.v rtl/common/ecc_secded32_dec.v rtl/cores/picorv32.v rtl/periph/simpleuart.v rtl/soc/system.v
 TB_SRCS    := sim/system_tb.v
 
 # Flags RISC-V GCC
@@ -41,6 +41,9 @@ help:
 	@echo "  make upload      - Upload app via UART to the board"
 	@echo "  make sim         - Simulate SoC (Icarus Verilog)"
 	@echo "  make sim-tmr     - Simulate with TMR and fault injection tests"
+	@echo "  make sim-ecc     - Simulate with ECC register hardening"
+	@echo "  make sim-tmr-ecc - Simulate with full TMR + ECC protection"
+	@echo "  make sim-ecc-unit - Run unit tests for ECC (SECDED & picorv32_regs)"
 	@echo "  make sim-waves   - Simulate and open waves in Surfer/GTKWave"
 	@echo "  make synth       - Synthesize standard bitstream (prebuilt/system.bit)"
 	@echo "  make synth-tmr   - Synthesize with TMR (prebuilt/system_tmr.bit)"
@@ -86,6 +89,20 @@ sim: fw
 sim-tmr: fw
 	$(IVERILOG) -DPICORV32_TMR -o $(BUILD_DIR)/simv_tmr $(RTL_SRCS) $(TB_SRCS)
 	$(VVP) $(BUILD_DIR)/simv_tmr
+
+sim-ecc: fw
+	$(IVERILOG) -DPICORV32_ECC -o $(BUILD_DIR)/simv_ecc $(RTL_SRCS) $(TB_SRCS)
+	$(VVP) $(BUILD_DIR)/simv_ecc
+
+sim-tmr-ecc: fw
+	$(IVERILOG) -DPICORV32_TMR -DPICORV32_ECC -o $(BUILD_DIR)/simv_tmr_ecc $(RTL_SRCS) $(TB_SRCS)
+	$(VVP) $(BUILD_DIR)/simv_tmr_ecc
+
+sim-ecc-unit: $(BUILD_DIR)
+	$(IVERILOG) -o $(BUILD_DIR)/ecc_secded32_tb.vvp rtl/common/ecc_secded32_enc.v rtl/common/ecc_secded32_dec.v sim/ecc_secded32_tb.v
+	$(VVP) $(BUILD_DIR)/ecc_secded32_tb.vvp
+	$(IVERILOG) -DPICORV32_ECC -o $(BUILD_DIR)/picorv32_regs_tb.vvp rtl/common/ecc_secded32_enc.v rtl/common/ecc_secded32_dec.v rtl/cores/picorv32.v sim/picorv32_regs_tb.v
+	$(VVP) $(BUILD_DIR)/picorv32_regs_tb.vvp
 
 sim-waves: fw
 	$(IVERILOG) -o $(BUILD_DIR)/simv $(RTL_SRCS) $(TB_SRCS)

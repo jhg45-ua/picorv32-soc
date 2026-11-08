@@ -54,6 +54,11 @@
 // design are read in the correct order.
 `define PICORV32_V
 
+// [ECC Hardening] Master switch: enable external register file with ECC
+`ifdef PICORV32_ECC
+  `define PICORV32_REGS picorv32_regs
+`endif
+
 // [TMR Hardening] Master switch: if PICORV32_TMR is defined, enable all sub-TMRs
 `ifdef PICORV32_TMR
   `define PICORV32_TMR_FSM
@@ -307,6 +312,9 @@ module picorv32 #(
                 cpuregs[i] = 0;
         end
     end
+
+    wire regfile_sbiterr = 1'b0;
+    wire regfile_dbiterr = 1'b0;
 `endif
 
     task empty_statement;
@@ -1536,6 +1544,9 @@ module picorv32 #(
     wire [5:0] cpuregs_raddr1 = ENABLE_REGS_DUALPORT ? decoded_rs1 : decoded_rs;
     wire [5:0] cpuregs_raddr2 = ENABLE_REGS_DUALPORT ? decoded_rs2 : 0;
 
+    (* keep = "true" *) wire regfile_sbiterr;
+    (* keep = "true" *) wire regfile_dbiterr;
+
     // Old: `PICORV32_REGS
     picorv32_regs cpuregs (
         .clk(clk),
@@ -1545,7 +1556,9 @@ module picorv32 #(
         .raddr2(cpuregs_raddr2),
         .wdata(cpuregs_wrdata),
         .rdata1(cpuregs_rdata1),
-        .rdata2(cpuregs_rdata2)
+        .rdata2(cpuregs_rdata2),
+        .sbiterr(regfile_sbiterr),
+        .dbiterr(regfile_dbiterr)
     );
 
     always @* begin
@@ -2375,8 +2388,12 @@ module picorv32_regs (
     input [5:0] raddr2,
     input [31:0] wdata,
     output [31:0] rdata1,
-    output [31:0] rdata2
+    output [31:0] rdata2,
+    output sbiterr,
+    output dbiterr
 );
+`ifndef PICORV32_ECC
+    // Original version without ECC (32 bits)
     reg [31:0] regs [0:30];
 
     always @(posedge clk)
@@ -2384,6 +2401,97 @@ module picorv32_regs (
 
     assign rdata1 = regs[~raddr1[4:0]];
     assign rdata2 = regs[~raddr2[4:0]];
+    assign sbiterr = 1'b0;
+    assign dbiterr = 1'b0;
+`else
+    // -------------------------------------------------------------------------
+    // 1. Storage: 31 registers (x1 to x31) of 39 bits (32 data + 7 ECC parity)
+    // Inverted index ~addr[4:0] maps: 1 -> 30, ..., 31 -> 0.
+    // -------------------------------------------------------------------------
+    reg [38:0] regs [0:30];
+
+    integer i;
+    initial begin
+        for (i = 0; i < 31; i = i + 1)
+            regs[i] = 39'b0;
+    end
+
+    // -------------------------------------------------------------------------
+    // 2. Safe Read for Ports 1 and 2:
+    // If raddr[4:0] == 0 (x0), return 39'b0 to avoid reading out-of-bounds of [0:30]
+    // -------------------------------------------------------------------------
+    wire [38:0] raw_word1 = (raddr1[4:0] != 5'd0) ? regs[~raddr1[4:0]] : 39'b0;
+    wire [38:0] raw_word2 = (raddr2[4:0] != 5'd0) ? regs[~raddr2[4:0]] : 39'b0;
+
+    // Port 1 Decoder (combinational in 0 cycles)
+    wire [31:0] dec_data1;
+    wire [ 6:0] syn1;
+    wire        sbiterr1_raw, dbiterr1_raw;
+
+    ecc_secded32_dec dec1 (
+        .code_in (raw_word1),
+        .data_out(dec_data1),
+        .syndrome(syn1),
+        .sbiterr (sbiterr1_raw),
+        .dbiterr (dbiterr1_raw)
+    );
+
+    // Port 2 Decoder (combinational in 0 cycles)
+    wire [31:0] dec_data2;
+    wire [ 6:0] syn2;
+    wire        sbiterr2_raw, dbiterr2_raw;
+
+    ecc_secded32_dec dec2 (
+        .code_in (raw_word2),
+        .data_out(dec_data2),
+        .syndrome(syn2),
+        .sbiterr (sbiterr2_raw),
+        .dbiterr (dbiterr2_raw)
+    );
+
+    assign rdata1 = dec_data1;
+    assign rdata2 = dec_data2;
+
+    // Filter error flags: x0 is hardwired to zero, so errors on addr 0 are ignored
+    wire sbiterr1 = sbiterr1_raw && (raddr1[4:0] != 5'd0);
+    wire dbiterr1 = dbiterr1_raw && (raddr1[4:0] != 5'd0);
+    wire sbiterr2 = sbiterr2_raw && (raddr2[4:0] != 5'd0);
+    wire dbiterr2 = dbiterr2_raw && (raddr2[4:0] != 5'd0);
+
+    assign sbiterr = sbiterr1 || sbiterr2;
+    assign dbiterr = dbiterr1 || dbiterr2;
+
+    // -------------------------------------------------------------------------
+    // 3. Auto-Scrubbing (Self-Healing) Logic
+    // If CPU is not writing (!wen) and a single-bit error is detected,
+    // write back the corrected code word to the affected register.
+    // -------------------------------------------------------------------------
+    wire scrub1 = sbiterr1;
+    wire scrub2 = !sbiterr1 && sbiterr2; // Priority to port 1 if both have errors
+    wire scrub_en = !wen && (scrub1 || scrub2);
+
+    wire [4:0]  scrub_addr = scrub1 ? ~raddr1[4:0] : ~raddr2[4:0];
+    wire [31:0] scrub_data = scrub1 ? dec_data1    : dec_data2;
+
+    // Encoder input multiplexer:
+    // If CPU writes (wen=1), encode wdata; if scrubbing, encode healed data.
+    wire [31:0] enc_data_in = wen ? wdata : scrub_data;
+    wire [38:0] enc_code_out;
+
+    ecc_secded32_enc enc (
+        .data_in (enc_data_in),
+        .code_out(enc_code_out),
+        .ecc_out ()
+    );
+
+    always @(posedge clk) begin
+        if (wen) begin
+            regs[~waddr[4:0]] <= enc_code_out;
+        end else if (scrub_en) begin
+            regs[scrub_addr] <= enc_code_out;
+        end
+    end
+`endif
 endmodule
 
 
