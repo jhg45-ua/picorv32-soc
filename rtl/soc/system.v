@@ -70,9 +70,61 @@ module system #(
       .eoi         ()
   );
 
-  // 16 KB BRAM memory, initialized with firmware.hex
+`ifdef PICORV32_ECC
+  // =============================================================
+  // Memoria BRAM de 16 KB con Protección ECC SECDED(39,32)
+  // =============================================================
+  wire        ram_sel = mem_valid && ((mem_addr >> 2) < MEM_SIZE);
+
+  // Registro de estado para Read-Modify-Write (sb, sh)
+  reg         rmw_state;
+
+  wire [11:0] bram_addrb = mem_addr[13:2];
+  wire        bram_enb   = ram_sel && (!mem_wstrb || ((mem_wstrb != 4'b1111) && !rmw_state));
+
+  wire [31:0] bram_doutb;
+  wire        bram_sbiterr;
+  wire        bram_dbiterr;
+  wire [11:0] bram_rdaddrecc;
+
+  // Multiplexor de fusión: mezcla los bytes nuevos con los 32b sanos leídos de BRAM
+  wire [31:0] rmw_merged_data;
+  assign rmw_merged_data[7:0]   = mem_wstrb[0] ? mem_wdata[7:0] : bram_doutb[7:0];
+  assign rmw_merged_data[15:8]  = mem_wstrb[1] ? mem_wdata[15:8] : bram_doutb[15:8];
+  assign rmw_merged_data[23:16] = mem_wstrb[2] ? mem_wdata[23:16] : bram_doutb[23:16];
+  assign rmw_merged_data[31:24] = mem_wstrb[3] ? mem_wdata[31:24] : bram_doutb[31:24];
+
+  wire        bram_wea   = ram_sel && ((mem_wstrb == 4'b1111) || rmw_state);
+  wire        bram_ena   = bram_wea;
+  wire [11:0] bram_addra = mem_addr[13:2];
+  wire [31:0] bram_dina  = rmw_state ? rmw_merged_data : mem_wdata;
+
+  bram_ecc #(
+      .WORDS     (MEM_SIZE),
+      .ADDR_WIDTH(12),
+      .INIT_FILE (FIRMWARE_FILE)
+  ) ram (
+      .clka         (clk),
+      .ena          (bram_ena),
+      .wea          (bram_wea),
+      .addra        (bram_addra),
+      .dina         (bram_dina),
+      .injectsbiterr(1'b0),
+      .injectdbiterr(1'b0),
+
+      .clkb     (clk),
+      .enb      (bram_enb),
+      .addrb    (bram_addrb),
+      .doutb    (bram_doutb),
+      .sbiterr  (bram_sbiterr),
+      .dbiterr  (bram_dbiterr),
+      .rdaddrecc(bram_rdaddrecc)
+  );
+`else
+  // 16 KB BRAM estándar sin ECC
   reg [31:0] memory[0:MEM_SIZE-1];
   initial $readmemh(FIRMWARE_FILE, memory);
+`endif
 
   // Register used to hold the read data from memory or MMIO devices
   reg  [31:0] m_read_data;
@@ -111,16 +163,39 @@ module system #(
       m_read_en <= 0;
       leds      <= 0;
       mem_rdata <= 0;
+`ifdef PICORV32_ECC
+      rmw_state <= 0;
+`endif
     end else begin
-      m_read_en   <= 0;
-      mem_ready   <= mem_valid && !mem_ready && m_read_en;
+      m_read_en <= 0;
+      mem_ready <= mem_valid && !mem_ready && m_read_en;
 
+`ifdef PICORV32_ECC
+      if (m_read_en) begin
+        mem_rdata <= bram_doutb;
+      end
+`else
       m_read_data <= memory[mem_addr[15:2]];
       mem_rdata   <= m_read_data;
+`endif
 
       if (mem_valid && !mem_ready) begin
         // 1. RAM Access (16 KB)
         if ((mem_addr >> 2) < MEM_SIZE) begin
+`ifdef PICORV32_ECC
+          if (!mem_wstrb) begin
+            m_read_en <= 1;
+          end else if (mem_wstrb == 4'b1111) begin
+            mem_ready <= 1;
+          end else begin
+            if (!rmw_state) begin
+              rmw_state <= 1;
+            end else begin
+              mem_ready <= 1;
+              rmw_state <= 0;
+            end
+          end
+`else
           if (!mem_wstrb) begin
             m_read_en <= 1;
           end else begin
@@ -130,6 +205,7 @@ module system #(
             if (mem_wstrb[3]) memory[mem_addr[15:2]][31:24] <= mem_wdata[31:24];
             mem_ready <= 1;
           end
+`endif
         end  // 2. LEDs Register (0x1000_0000)
         else if (mem_addr == 32'h1000_0000) begin
           if (|mem_wstrb) leds <= mem_wdata[14:0];
