@@ -23,7 +23,7 @@ TMR_SUFFIX := $(if $(filter 1,$(TMR)),_tmr,)
 BITSTREAM  ?= prebuilt/system$(TMR_SUFFIX).bit
 
 # RTL sources (common, cores, peripherals, SoC)
-RTL_SRCS   := rtl/common/tmr_voter.v rtl/common/ecc_secded32_enc.v rtl/common/ecc_secded32_dec.v rtl/cores/picorv32.v rtl/periph/simpleuart.v rtl/soc/system.v
+RTL_SRCS   := rtl/common/tmr_voter.v rtl/common/ecc_secded32_enc.v rtl/common/ecc_secded32_dec.v rtl/cores/picorv32.v rtl/periph/simpleuart.v rtl/soc/bram_ecc.v rtl/soc/system.v
 TB_SRCS    := sim/system_tb.v
 
 # Flags RISC-V GCC
@@ -67,8 +67,8 @@ $(BUILD_DIR)/firmware.hex: sw/common/firmware.S $(FW_SRC) sw/common/firmware.lds
 	@$(TOOLCHAIN)gcc $(CFLAGS) sw/common/firmware.S $(FW_SRC) \
 		$(LDFLAGS),--defsym=ORG=0x0,-Map,$(BUILD_DIR)/firmware.map $(LIBS) -o $(BUILD_DIR)/firmware.elf
 	@$(TOOLCHAIN)objcopy -O binary $(BUILD_DIR)/firmware.elf $(BUILD_DIR)/firmware.bin
-	@python3 sw/common/makehex.py $(BUILD_DIR)/firmware.bin 4096 > $@
-	@echo "[OK] Firmware generated in $@"
+	@python3 sw/common/makehex.py $(BUILD_DIR)/firmware.bin 4096 $(BUILD_DIR)/firmware.coe > $@
+	@echo "[OK] Firmware generated in $@ and $(BUILD_DIR)/firmware.coe"
 
 app: $(BUILD_DIR)
 	@echo "[CC] Compiling $(APP).c..."
@@ -143,6 +143,7 @@ prog-ofl-tmr:
 lint:
 	$(VERILATOR) -sv --lint-only -Wall -y rtl/common -y rtl/cores -y rtl/periph -y rtl/soc \
 		-Wno-UNUSEDSIGNAL -Wno-PINCONNECTEMPTY -Wno-BLKSEQ -Wno-DECLFILENAME -Wno-GENUNNAMED -Wno-MULTITOP \
+		-Wno-WIDTHTRUNC -Wno-WIDTHEXPAND -Wno-TIMESCALEMOD -Wno-PROCASSINIT -Wno-PINMISSING -Wno-UNUSEDPARAM \
 		rtl/soc/system.v
 
 clean:
