@@ -23,7 +23,8 @@ TB_SRCS    := sim/system_tb.v
 
 # Flags RISC-V GCC
 CFLAGS     := -Os -mabi=ilp32 -march=rv32i -ffreestanding -nostdlib --std=gnu99
-LDFLAGS    := -Wl,-Bstatic,-T,sw/common/firmware.lds,--strip-debug -lgcc
+LDFLAGS    := -Wl,-Bstatic,-T,sw/common/firmware.lds,--strip-debug
+LIBS       := -lgcc
 
 # -------------------------------------------------------------
 # Help
@@ -54,14 +55,14 @@ fw: $(BUILD_DIR)/firmware.hex
 $(BUILD_DIR)/firmware.hex: sw/common/firmware.S sw/bootloader/bootloader.c sw/common/firmware.lds $(BUILD_DIR)
 	@echo "[CC] Compilando bootloader..."
 	@$(TOOLCHAIN)gcc $(CFLAGS) sw/common/firmware.S sw/bootloader/bootloader.c \
-		$(LDFLAGS),--defsym=ORG=0x0,-Map,$(BUILD_DIR)/bootloader.map -o $(BUILD_DIR)/bootloader.elf
+		$(LDFLAGS),--defsym=ORG=0x0,-Map,$(BUILD_DIR)/bootloader.map $(LIBS) -o $(BUILD_DIR)/bootloader.elf
 	@$(TOOLCHAIN)objcopy -O binary $(BUILD_DIR)/bootloader.elf $(BUILD_DIR)/bootloader.bin
 	@python3 sw/common/makehex.py $(BUILD_DIR)/bootloader.bin 4096 > $@
 
 app: $(BUILD_DIR)
 	@echo "[CC] Compilando $(APP).c..."
 	@$(TOOLCHAIN)gcc $(CFLAGS) sw/common/firmware.S sw/apps/$(APP).c \
-		$(LDFLAGS),--defsym=ORG=0x800,-Map,$(BUILD_DIR)/$(APP).map -o $(BUILD_DIR)/$(APP).elf
+		$(LDFLAGS),--defsym=ORG=0x800,-Map,$(BUILD_DIR)/$(APP).map $(LIBS) -o $(BUILD_DIR)/$(APP).elf
 	@$(TOOLCHAIN)objcopy -O binary $(BUILD_DIR)/$(APP).elf $(BUILD_DIR)/$(APP).bin
 
 upload: app
