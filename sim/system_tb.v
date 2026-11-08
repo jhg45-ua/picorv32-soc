@@ -277,6 +277,253 @@ module system_tb;
   end
 `endif
 
+`ifdef PICORV32_ECC
+  // =============================================================
+  // Test 1: SEU on Register File (Auto-Scrubbing Verification)
+  // =============================================================
+  initial begin
+    // Wait for the system to reach steady state
+    repeat (95000) @(posedge clk);
+
+    $display("\n========================================================");
+    $display("[ECC REGS TEST] Starting Register File SEU & Auto-Scrubbing Test");
+    $display("========================================================");
+
+    // Check initial healthy status
+    #1;
+    if (uut.cpu.regfile_sbiterr || uut.cpu.regfile_dbiterr) begin
+      $display("[ECC REGS TEST] ERROR: Register file already reports errors before test!");
+    end
+
+    // Inject a single-bit error (SEU) into active register x15 (a5, inverted index ~5'd15 = 16)
+    @(posedge clk);
+    $display("[ECC REGS TEST] [%0t ns] Injecting SEU into register x15 (a5, idx 16)...", $time);
+    $display("[ECC REGS TEST] Pre-SEU  word[16]: 0x%010h", uut.cpu.cpuregs.regs[16]);
+
+    uut.cpu.cpuregs.regs[16] = uut.cpu.cpuregs.regs[16] ^ 39'h1;
+    $display("[ECC REGS TEST] Post-SEU word[16]: 0x%010h (corrupted)", uut.cpu.cpuregs.regs[16]);
+
+    // Wait synchronously on clock edges for the CPU to read x15 and trigger the sbiterr flag
+    while (!uut.cpu.regfile_sbiterr) begin
+      @(posedge clk);
+      #1;
+    end
+    $display(
+        "[ECC REGS TEST] [%0t ns] SUCCESS: Single-bit error detected on read! regfile_sbiterr = 1",
+        $time);
+
+    // Wait for the next clock edge to allow auto-scrubbing to write back the corrected value
+    @(posedge clk);
+    #1;  // Wait combinational propagation after the clock edge
+    if (!uut.cpu.regfile_sbiterr && (uut.cpu.cpuregs.regs[16][0] == 1'b0)) begin
+      $display("[ECC REGS TEST] SUCCESS: Auto-scrubbing verified! Register healed: 0x%010h",
+               uut.cpu.cpuregs.regs[16]);
+      $display("[ECC REGS TEST] Telemetry cleared: regfile_sbiterr = 0");
+    end else begin
+      $display("[ECC REGS TEST] FAILURE: Auto-scrubbing failed! word[16] = 0x%010h, sbiterr = %b",
+               uut.cpu.cpuregs.regs[16], uut.cpu.regfile_sbiterr);
+    end
+
+    $display("========================================================\n");
+  end
+
+  // =============================================================
+  // Test 2: MEU on Register File (Double-Bit Error Detection)
+  // =============================================================
+  // Save the original value of register x15 (idx 16) before injecting errors
+  reg [38:0] orig_reg16;
+
+  initial begin
+    // Wait for Test 1 to finish and system to remain stable
+    repeat (110000) @(posedge clk);
+
+    $display("========================================================");
+    $display("[ECC REGS TEST 2] Starting Register File Double-Bit Error (MEU) Test");
+    $display("========================================================");
+
+    // Check initial healthy status
+    #1;
+    if (uut.cpu.regfile_sbiterr || uut.cpu.regfile_dbiterr) begin
+      $display("[ECC REGS TEST 2] ERROR: Register file already reports errors before MEU test!");
+    end
+
+    // Save clean value and inject 2 simultaneous bit-flips (bits 0 and 1) into x15 (idx 16)
+    @(posedge clk);
+    orig_reg16 = uut.cpu.cpuregs.regs[16];
+    $display("[ECC REGS TEST 2] [%0t ns] Injecting MEU into register x15 (a5, idx 16)...", $time);
+    $display("[ECC REGS TEST 2] Healthy word[16]: 0x%010h", orig_reg16);
+
+    uut.cpu.cpuregs.regs[16] = orig_reg16 ^ 39'h3;  // Flip bit 0 and bit 1
+    $display("[ECC REGS TEST 2] Corrupted word[16]: 0x%010h (2 bit-flips)",
+             uut.cpu.cpuregs.regs[16]);
+
+    // Synchronous sampling waiting for double-bit error detection
+    while (!uut.cpu.regfile_dbiterr) begin
+      @(posedge clk);
+      #1;
+    end
+
+    // Verify uncorrectable error flags
+    if (uut.cpu.regfile_dbiterr && !uut.cpu.regfile_sbiterr) begin
+      $display(
+          "[ECC REGS TEST 2] SUCCESS: Uncorrectable double error correctly detected! (dbiterr=1, sbiterr=0)");
+    end else begin
+      $display("[ECC REGS TEST 2] FAILURE: Error flags incorrect! (dbiterr=%b, sbiterr=%b)",
+               uut.cpu.regfile_dbiterr, uut.cpu.regfile_sbiterr);
+    end
+
+    // Verify auto-scrubbing is inhibited (must NOT overwrite on double error)
+    @(posedge clk);
+    #1;
+    if (uut.cpu.cpuregs.regs[16] == (orig_reg16 ^ 39'h3)) begin
+      $display(
+          "[ECC REGS TEST 2] SUCCESS: Memory preserved! Auto-scrubbing correctly inhibited on MEU.");
+    end else begin
+      $display(
+          "[ECC REGS TEST 2] FAILURE: Memory was illegally modified during MEU! word[16]=0x%010h",
+          uut.cpu.cpuregs.regs[16]);
+    end
+
+    // Restore healthy register value so firmware continues execution towards BRAM tests
+    @(posedge clk);
+    uut.cpu.cpuregs.regs[16] = orig_reg16;
+    @(posedge clk);
+    #1;
+    if (!uut.cpu.regfile_dbiterr && !uut.cpu.regfile_sbiterr) begin
+      $display(
+          "[ECC REGS TEST 2] SUCCESS: Register restored and telemetry cleared (dbiterr=0, sbiterr=0)");
+    end
+
+    $display("========================================================\n");
+  end
+
+  // =============================================================
+  // Test 3: SEU on 16 KB BRAM (Instruction Fetch & Correction)
+  // =============================================================
+  reg [38:0] orig_bram_word;
+  localparam [11:0] TEST3_ADDR = 12'd8;  // PC 0x20: lbu a4, 0(a0) in puts()
+
+  initial begin
+    // Wait for Test 2 to finish and system to remain stable
+    repeat (125000) @(posedge clk);
+
+    $display("========================================================");
+    $display("[ECC BRAM TEST 3] Starting 16 KB BRAM Single-Bit Error (SEU) Test");
+    $display("========================================================");
+
+    // Check initial healthy status
+    #1;
+    if (uut.bram_sbiterr || uut.bram_dbiterr) begin
+      $display("[ECC BRAM TEST 3] ERROR: BRAM already reports error before test!");
+    end
+
+    // Save clean word and inject 1 bit-flip into active instruction memory (word 129, PC 0x204)
+    @(posedge clk);
+    orig_bram_word = uut.ram.mem[TEST3_ADDR];
+    $display("[ECC BRAM TEST 3] [%0t ns] Injecting SEU into BRAM word addr %0d (PC 0x%03h)...",
+             $time, TEST3_ADDR, TEST3_ADDR << 2);
+    $display("[ECC BRAM TEST 3] Healthy word: 0x%010h", orig_bram_word);
+
+    uut.ram.mem[TEST3_ADDR] = orig_bram_word ^ 39'h1;  // Flip bit 0
+    $display("[ECC BRAM TEST 3] Corrupted word: 0x%010h (1 bit-flip)", uut.ram.mem[TEST3_ADDR]);
+
+    // Synchronous sampling waiting for SEU detection on read
+    while (!uut.bram_sbiterr) begin
+      @(posedge clk);
+      #1;
+    end
+
+    // Verify detection flags and address telemetry
+    if (uut.bram_sbiterr && !uut.bram_dbiterr && (uut.bram_rdaddrecc == TEST3_ADDR)) begin
+      $display(
+          "[ECC BRAM TEST 3] SUCCESS: Single-bit error detected on BRAM read! (sbiterr=1, dbiterr=0, addr=%0d)",
+          uut.bram_rdaddrecc);
+    end else begin
+      $display(
+          "[ECC BRAM TEST 3] FAILURE: Flags incorrect or address mismatch! (sbiterr=%b, dbiterr=%b, addr=%0d)",
+          uut.bram_sbiterr, uut.bram_dbiterr, uut.bram_rdaddrecc);
+    end
+
+    // Verify processor execution continues without trap
+    if (!uut.trap) begin
+      $display(
+          "[ECC BRAM TEST 3] SUCCESS: Instruction corrected on-the-fly! Core executed safely without trap.");
+    end
+
+    // Restore original clean word in BRAM
+    @(posedge clk);
+    uut.ram.mem[TEST3_ADDR] = orig_bram_word;
+    @(posedge clk);
+    #1;
+    if (!uut.bram_sbiterr && !uut.bram_dbiterr) begin
+      $display(
+          "[ECC BRAM TEST 3] SUCCESS: BRAM word restored and telemetry cleared (sbiterr=0, dbiterr=0)");
+    end
+
+    $display("========================================================\n");
+  end
+
+  // =============================================================
+  // Test 4: MEU on 16 KB BRAM (Double-Bit Error Detection)
+  // =============================================================
+  reg [38:0] orig_bram_word4;
+  localparam [11:0] TEST4_ADDR = 12'd8;  // PC 0x20: lbu a4, 0(a0) in puts()
+
+  initial begin
+    // Wait for Test 3 to finish and system to remain stable
+    repeat (140000) @(posedge clk);
+
+    $display("========================================================");
+    $display("[ECC BRAM TEST 4] Starting 16 KB BRAM Double-Bit Error (MEU) Test");
+    $display("========================================================");
+
+    // Check initial healthy status
+    #1;
+    if (uut.bram_sbiterr || uut.bram_dbiterr) begin
+      $display("[ECC BRAM TEST 4] ERROR: BRAM already reports error before MEU test!");
+    end
+
+    // Save clean word and inject 2 bit-flips (bits 0 and 1) into instruction memory
+    @(posedge clk);
+    orig_bram_word4 = uut.ram.mem[TEST4_ADDR];
+    $display("[ECC BRAM TEST 4] [%0t ns] Injecting MEU into BRAM word addr %0d (PC 0x%03h)...",
+             $time, TEST4_ADDR, TEST4_ADDR << 2);
+    $display("[ECC BRAM TEST 4] Healthy word: 0x%010h", orig_bram_word4);
+
+    uut.ram.mem[TEST4_ADDR] = orig_bram_word4 ^ 39'h0300000000;  // Flip bit 0 and bit 1
+    $display("[ECC BRAM TEST 4] Corrupted word: 0x%010h (2 bit-flips)", uut.ram.mem[TEST4_ADDR]);
+
+    // 3. Synchronous sampling waiting for double-bit error detection
+    while (!uut.bram_dbiterr) begin
+      @(posedge clk);
+      #1;
+    end
+
+    // Verify detection flags and address telemetry
+    if (uut.bram_dbiterr && !uut.bram_sbiterr && (uut.bram_rdaddrecc == TEST4_ADDR)) begin
+      $display(
+          "[ECC BRAM TEST 4] SUCCESS: Uncorrectable double error correctly detected! (dbiterr=1, sbiterr=0, addr=%0d)",
+          uut.bram_rdaddrecc);
+    end else begin
+      $display(
+          "[ECC BRAM TEST 4] FAILURE: Flags incorrect or address mismatch! (dbiterr=%b, sbiterr=%b, addr=%0d)",
+          uut.bram_dbiterr, uut.bram_sbiterr, uut.bram_rdaddrecc);
+    end
+
+    // Restore original clean word in BRAM to let CPU resume cleanly
+    @(posedge clk);
+    uut.ram.mem[TEST4_ADDR] = orig_bram_word4;
+    @(posedge clk);
+    #1;
+    if (!uut.bram_sbiterr && !uut.bram_dbiterr) begin
+      $display(
+          "[ECC BRAM TEST 4] SUCCESS: BRAM word restored and telemetry cleared (sbiterr=0, dbiterr=0)");
+    end
+
+    $display("========================================================\n");
+  end
+`endif
+
   // Simulation timeout and trap check
   initial begin
     repeat (4000000) @(posedge clk);
