@@ -29,8 +29,6 @@ module bram_ecc #(
       .wea(wea),
       .addra(addra),
       .dina(dina),
-      .injectsbiterr(injectsbiterr),
-      .injectdbiterr(injectdbiterr),
       .clkb(clkb),
       .enb(enb),
       .addrb(addrb),

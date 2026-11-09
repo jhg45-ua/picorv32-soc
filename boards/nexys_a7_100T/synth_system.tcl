@@ -60,11 +60,28 @@ read_verilog rtl/soc/system.v
 # Read board pin constraints
 read_xdc boards/nexys_a7_100T/nexys_a7.xdc
 
-# Note on BRAM with ECC:
-# Xilinx Block Memory Generator strictly forbids memory initialization (Load_Init_File)
-# when ECC is enabled. Because our RISC-V SoC must boot directly from BRAM at 0x0000_0000,
-# rtl/soc/bram_ecc.v infers native BRAM primitives (RAMB36E1) with SECDED ECC logic,
-# pre-initialized from build/firmware.hex with calculated parity.
+# If ECC is enabled, generate Xilinx Block Memory Generator IP on-the-fly (Uninitialized)
+if {$enable_ecc} {
+    puts "--> Generating Xilinx Block Memory Generator IP with Soft ECC (Uninitialized)..."
+
+    # Clean leftover IP directory if it exists from a previous run
+    file delete -force blk_mem_gen_ecc
+
+    create_ip -name blk_mem_gen -vendor xilinx.com -library ip -module_name blk_mem_gen_ecc
+    set_property -dict [list \
+        CONFIG.Memory_Type {Simple_Dual_Port_RAM} \
+        CONFIG.Assume_Synchronous_Clk {true} \
+        CONFIG.Write_Width_A {32} \
+        CONFIG.Write_Depth_A {4096} \
+        CONFIG.Read_Width_B {32} \
+        CONFIG.Enable_B {Use_ENB_Pin} \
+        CONFIG.Register_PortB_Output_of_Memory_Primitives {false} \
+        CONFIG.softecc {true} \
+        CONFIG.Load_Init_File {false} \
+    ] [get_ips blk_mem_gen_ecc]
+    generate_target synthesis [get_ips blk_mem_gen_ecc]
+    catch {synth_ip [get_ips blk_mem_gen_ecc]}
+}
 
 # Assemble Verilog defines
 set verilog_defines [list]
@@ -73,6 +90,7 @@ if {$enable_tmr} {
 }
 if {$enable_ecc} {
     lappend verilog_defines "PICORV32_ECC"
+    lappend verilog_defines "XILINX_ECC_IP"
 }
 
 # Run synthesis targeting Nexys A7-100T
