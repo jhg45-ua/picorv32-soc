@@ -67,6 +67,9 @@ if {$enable_ecc} {
         error "ERROR: build/firmware.coe not found! Please run 'make fw' first to generate it."
     }
 
+    # Clean leftover IP directory if it exists from a previous run
+    file delete -force blk_mem_gen_ecc
+
     create_ip -name blk_mem_gen -vendor xilinx.com -library ip -module_name blk_mem_gen_ecc
     set_property -dict [list \
         CONFIG.Memory_Type {Simple_Dual_Port_RAM} \
@@ -76,10 +79,9 @@ if {$enable_ecc} {
         CONFIG.Read_Width_B {32} \
         CONFIG.Enable_B {Use_ENB_Pin} \
         CONFIG.Register_PortB_Output_of_Memory_Primitives {false} \
-        CONFIG.Use_ECC_Type {Soft_ECC} \
-        CONFIG.ECC {true} \
-        CONFIG.Error_Injection_Type {Single_Bit_and_Double_Bit_Error_Injection} \
-        CONFIG.Use_Error_Injection_Pins {true} \
+        CONFIG.softecc {true} \
+        CONFIG.use_error_injection_pins {true} \
+        CONFIG.error_injection_type {Single_and_Double_Bit_Error_Injection} \
         CONFIG.Load_Init_File {true} \
         CONFIG.Coe_File [file normalize "build/firmware.coe"] \
     ] [get_ips blk_mem_gen_ecc]

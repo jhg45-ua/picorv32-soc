@@ -174,7 +174,7 @@ lint:
 		rtl/soc/system.v
 
 clean:
-	@rm -rf $(BUILD_DIR) .Xil/ *.jou *.log xsim.dir/ xvlog.* xelab.* webtalk* *.vcd
+	@rm -rf $(BUILD_DIR) blk_mem_gen_ecc .Xil/ *.jou *.log xsim.dir/ xvlog.* xelab.* webtalk* *.vcd
 	@echo "[OK] Directory cleaned."
 
 .PHONY: help fw app upload sim sim-tmr sim-ecc sim-tmr-ecc sim-ecc-unit sim-waves \
