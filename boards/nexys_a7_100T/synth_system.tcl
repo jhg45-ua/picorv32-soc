@@ -122,4 +122,4 @@ file copy -force build/timing_summary_${bit_name}.rpt reports/timing_summary_${b
 file mkdir prebuilt
 set_property BITSTREAM.GENERAL.COMPRESS TRUE [current_design]
 write_bitstream -force prebuilt/${bit_name}.bit
-puts "\n[OK] Bitstream and reports generated successfully for ${bit_name}."
+puts "\n\[OK\] Bitstream and reports generated successfully for ${bit_name}."
