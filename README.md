@@ -193,18 +193,34 @@ make clean   # Clean build artifacts
 
 ## Synthesis & Resource Utilization Comparison
 
-Target: **Xilinx Artix-7 XC7A100TCSG324-1** (Nexys A7-100T) @ **100 MHz**.
+Target: **Xilinx Artix-7 XC7A100TCSG324-1** (Nexys A7-100T) @ **100 MHz** (`Period = 10.0 ns`).  
+Synthesis reports extracted from Vivado batch implementation (`reports/`):
 
-| Metric | Base (No Hardening) | TMR Only (Control) | ECC Only (Memories) | Full (TMR + ECC) |
+| Metric | Base (No Hardening) | TMR Only (Control Path) | ECC Only (Memories) | Full (TMR + ECC) |
 | :--- | :---: | :---: | :---: | :---: |
-| **Bitstream File** | `system.bit` | `system_tmr.bit` | `system_ecc.bit` | `system_tmr_ecc.bit` |
-| **Slice LUTs** | *TBD* | *TBD* | *TBD* | *TBD* |
-| **Slice Registers (FFs)** | *TBD* | *TBD* | *TBD* | *TBD* |
-| **LUTRAMs (`RAM32M`)** | *TBD* | *TBD* | *TBD* | *TBD* |
-| **Block RAM (`RAMB36E1`)**| *TBD* | *TBD* | *TBD* | *TBD* |
-| **Worst Negative Slack (WNS)** | *TBD* | *TBD* | *TBD* | *TBD* |
+| **Bitstream File** | `system.bit` (714 KB) | `system_tmr.bit` (818 KB) | `system_ecc.bit` (774 KB) | `system_tmr_ecc.bit` (865 KB) |
+| **Slice LUTs** | **1,100** (1.74%) | **1,357** (+23.4%) | **1,595** (+45.0%) | **1,856** (+68.7%) |
+| ↳ *LUT as Logic* | 1,056 | 1,313 | 1,511 | 1,772 |
+| ↳ *LUT as Memory (LUTRAM)* | 44 | 44 | 84 (+90.9%) | 84 (+90.9%) |
+| **Slice Registers (FFs)** | **703** (0.55%) | **870** (+23.8%) | **694** (-1.3%) | **861** (+22.5%) |
+| **Distributed RAM (`RAM32M` Primitives)** | 10 `RAM32M` + 4 `RAM32X1D` | 10 `RAM32M` + 4 `RAM32X1D` | 20 `RAM32M` + 4 `RAM32X1D` | 20 `RAM32M` + 4 `RAM32X1D` |
+| **Block RAM Tiles** | **4.0** (4 `RAMB36E1`) | **4.0** (4 `RAMB36E1`) | **4.5** (4 `RAMB36E1` + 1 `RAMB18E1`) | **4.5** (4 `RAMB36E1` + 1 `RAMB18E1`) |
+| **Worst Negative Slack (WNS)** | **+3.056 ns** (MET) | **+2.426 ns** (MET) | **-1.011 ns** (VIOLATED) | **-0.547 ns** (VIOLATED) |
+| **Worst Hold Slack (WHS)** | +0.151 ns | +0.127 ns | +0.155 ns | +0.118 ns |
 | **Target Frequency ($F_{target}$)** | 100.0 MHz | 100.0 MHz | 100.0 MHz | 100.0 MHz |
-| **Estimated Max Freq ($F_{max}$)** | *TBD* | *TBD* | *TBD* | *TBD* |
+| **Estimated Max Freq ($F_{max}$)** | **144.0 MHz** | **132.0 MHz** | **90.8 MHz** | **94.8 MHz** |
+
+### Key Observations & Trade-Offs
+
+1. **Low Silicon Footprint**:
+   - Even with full TMR + ECC protection, the SoC consumes **< 3% of the total FPGA resources** on the Nexys A7-100T (1,856 of 63,400 LUTs, 861 of 126,800 FFs, and 4.5 of 135 BRAM tiles).
+2. **Control Path Hardening (TMR)**:
+   - Triplication of critical registers (`cpu_state`, `PC`, `latched_rd`, `mem_state`) and majority voters adds +257 LUTs (+23.4%) and +167 FFs (+23.8%).
+   - Preserves high frequency margins ($F_{max} = 132.0$ MHz), easily meeting the 100 MHz system clock.
+3. **Memory Hardening (ECC)**:
+   - **Register File (`cpuregs`)**: Expanding entries from 32 to 39 bits doubles the required `RAM32M` primitives (from 10 to 20 primitives, 44 to 84 LUTs).
+   - **Main 16 KB BRAM**: Adding 7 check bits across 4096 words allocates one additional `RAMB18E1` primitive (4.5 BRAM tiles total).
+   - **Timing Impact of Soft ECC**: Because Xilinx Soft ECC inserts multi-level XOR parity trees in series with the memory read path, the critical path delay increases by ~2.5 ns. At speed grade -1, the maximum operating frequency with unpipelined Soft ECC is **~91-95 MHz** (or 100 MHz by enabling optional output pipeline registers in the BRAM controller).
 
 ---
 
