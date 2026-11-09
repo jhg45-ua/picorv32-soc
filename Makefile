@@ -17,10 +17,11 @@ APP       ?= counter
 # ex: FW_SRC ?= sw/bootloader/bootloader.c
 FW_SRC    ?= sw/apps/counter.c
 
-# TMR mode (0: standard, 1: triplicated)
-TMR        ?= 0
-TMR_SUFFIX := $(if $(filter 1,$(TMR)),_tmr,)
-BITSTREAM  ?= prebuilt/system$(TMR_SUFFIX).bit
+# Hardening modes (0: disabled, 1: enabled)
+TMR         ?= 0
+ECC         ?= 0
+MODE_SUFFIX := $(if $(filter 1,$(TMR)),_tmr,)$(if $(filter 1,$(ECC)),_ecc,)
+BITSTREAM   ?= prebuilt/system$(MODE_SUFFIX).bit
 
 # RTL sources (common, cores, peripherals, SoC)
 RTL_SRCS   := rtl/common/tmr_voter.v rtl/common/ecc_secded32_enc.v rtl/common/ecc_secded32_dec.v rtl/cores/picorv32.v rtl/periph/simpleuart.v rtl/soc/bram_ecc.v rtl/soc/system.v
@@ -36,21 +37,29 @@ LIBS       := -lgcc
 # -------------------------------------------------------------
 help:
 	@echo "Available commands:"
-	@echo "  make fw          - Compile base firmware (firmware.hex a partir de FW_SRC)"
-	@echo "  make app         - Compile app (ex: make app APP=counter)"
-	@echo "  make upload      - Upload app via UART to the board"
-	@echo "  make sim         - Simulate SoC (Icarus Verilog)"
-	@echo "  make sim-tmr     - Simulate with TMR and fault injection tests"
-	@echo "  make sim-ecc     - Simulate with ECC register hardening"
-	@echo "  make sim-tmr-ecc - Simulate with full TMR + ECC protection"
-	@echo "  make sim-ecc-unit - Run unit tests for ECC (SECDED & picorv32_regs)"
-	@echo "  make sim-waves   - Simulate and open waves in Surfer/GTKWave"
-	@echo "  make synth       - Synthesize standard bitstream (prebuilt/system.bit)"
-	@echo "  make synth-tmr   - Synthesize with TMR (prebuilt/system_tmr.bit)"
-	@echo "  make prog        - Flash with Vivado JTAG"
-	@echo "  make prog-ofl    - Flash with openFPGALoader (laptop without Vivado)"
-	@echo "  make lint        - Linting RTL with Verilator"
-	@echo "  make clean       - Clean build folder and temporary files"
+	@echo "  make fw               - Compile base firmware (firmware.hex and firmware.coe)"
+	@echo "  make app              - Compile app (ex: make app APP=counter)"
+	@echo "  make upload           - Upload app via UART to the board"
+	@echo "  make sim              - Simulate standard SoC (Icarus Verilog)"
+	@echo "  make sim-tmr          - Simulate with TMR control hardening & fault injection"
+	@echo "  make sim-ecc          - Simulate with ECC memory hardening & fault injection"
+	@echo "  make sim-tmr-ecc      - Simulate with full TMR + ECC protection"
+	@echo "  make sim-ecc-unit     - Run unit tests for ECC (SECDED & picorv32_regs)"
+	@echo "  make sim-waves        - Simulate and open waves in Surfer/GTKWave"
+	@echo "  make synth            - Synthesize standard bitstream (system.bit)"
+	@echo "  make synth-tmr        - Synthesize with TMR hardening (system_tmr.bit)"
+	@echo "  make synth-ecc        - Synthesize with ECC memory hardening (system_ecc.bit)"
+	@echo "  make synth-tmr-ecc    - Synthesize with full TMR + ECC (system_tmr_ecc.bit)"
+	@echo "  make prog             - Flash standard bitstream via Vivado JTAG"
+	@echo "  make prog-tmr         - Flash TMR bitstream via Vivado JTAG"
+	@echo "  make prog-ecc         - Flash ECC bitstream via Vivado JTAG"
+	@echo "  make prog-tmr-ecc     - Flash full TMR+ECC bitstream via Vivado JTAG"
+	@echo "  make prog-ofl         - Flash standard bitstream with openFPGALoader"
+	@echo "  make prog-ofl-tmr     - Flash TMR bitstream with openFPGALoader"
+	@echo "  make prog-ofl-ecc     - Flash ECC bitstream with openFPGALoader"
+	@echo "  make prog-ofl-tmr-ecc - Flash full TMR+ECC bitstream with openFPGALoader"
+	@echo "  make lint             - Linting RTL with Verilator"
+	@echo "  make clean            - Clean build folder and temporary files"
 
 $(BUILD_DIR):
 	@mkdir -p $(BUILD_DIR)
@@ -113,14 +122,20 @@ sim-waves: fw
 # Synth Vivado (Batch mode)
 # -------------------------------------------------------------
 synth: fw
-	@echo "[VIVADO] Synthesizing (TMR=$(TMR))..."
-	@TMR=$(TMR) $(VIVADO) -nojournal -log $(BUILD_DIR)/synth$(TMR_SUFFIX).log -mode batch \
-		-source boards/nexys_a7_100T/synth_system.tcl -tclargs TMR=$(TMR)
+	@echo "[VIVADO] Synthesizing (TMR=$(TMR) ECC=$(ECC))..."
+	@TMR=$(TMR) ECC=$(ECC) $(VIVADO) -nojournal -log $(BUILD_DIR)/synth$(MODE_SUFFIX).log -mode batch \
+		-source boards/nexys_a7_100T/synth_system.tcl -tclargs TMR=$(TMR) ECC=$(ECC)
 	@echo "[OK] Bitstream generated in $(BITSTREAM)"
-	@grep -B2 -A8 "Slice LUTs" $(BUILD_DIR)/utilization_system$(TMR_SUFFIX).rpt 2>/dev/null || true
+	@grep -B2 -A8 "Slice LUTs" $(BUILD_DIR)/utilization_system$(MODE_SUFFIX).rpt 2>/dev/null || true
 
 synth-tmr:
-	@$(MAKE) synth TMR=1
+	@$(MAKE) synth TMR=1 ECC=0
+
+synth-ecc:
+	@$(MAKE) synth TMR=0 ECC=1
+
+synth-tmr-ecc:
+	@$(MAKE) synth TMR=1 ECC=1
 
 # -------------------------------------------------------------
 # Flash / JTAG
@@ -129,13 +144,25 @@ prog:
 	BITSTREAM=$(BITSTREAM) $(VIVADO) -nojournal -mode batch -source boards/nexys_a7_100T/prog.tcl
 
 prog-tmr:
-	@$(MAKE) prog TMR=1
+	@$(MAKE) prog TMR=1 ECC=0
+
+prog-ecc:
+	@$(MAKE) prog TMR=0 ECC=1
+
+prog-tmr-ecc:
+	@$(MAKE) prog TMR=1 ECC=1
 
 prog-ofl:
 	$(OFL) $(BITSTREAM)
 
 prog-ofl-tmr:
-	@$(MAKE) prog-ofl TMR=1
+	@$(MAKE) prog-ofl TMR=1 ECC=0
+
+prog-ofl-ecc:
+	@$(MAKE) prog-ofl TMR=0 ECC=1
+
+prog-ofl-tmr-ecc:
+	@$(MAKE) prog-ofl TMR=1 ECC=1
 
 # -------------------------------------------------------------
 # Linting RTL (Verilator) & Cleaning
@@ -150,4 +177,8 @@ clean:
 	@rm -rf $(BUILD_DIR) .Xil/ *.jou *.log xsim.dir/ xvlog.* xelab.* webtalk* *.vcd
 	@echo "[OK] Directory cleaned."
 
-.PHONY: help fw app upload sim sim-tmr sim-waves synth synth-tmr prog prog-tmr prog-ofl prog-ofl-tmr lint clean
+.PHONY: help fw app upload sim sim-tmr sim-ecc sim-tmr-ecc sim-ecc-unit sim-waves \
+	synth synth-tmr synth-ecc synth-tmr-ecc \
+	prog prog-tmr prog-ecc prog-tmr-ecc \
+	prog-ofl prog-ofl-tmr prog-ofl-ecc prog-ofl-tmr-ecc \
+	lint clean

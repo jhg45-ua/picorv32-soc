@@ -1,7 +1,9 @@
 # ==========================================
 # Build outputs y binarios temporales
 # ==========================================
-build/
+build/*
+!build/*.rpt
+!build/.gitkeep
 *.hex
 *.elf
 *.bin
@@ -11,11 +13,14 @@ build/
 *.bit
 
 # ==========================================
-# Excepción: Prebuilt bitstream para el portátil
+# Excepción: Prebuilt bitstream y reportes
 # ==========================================
 !prebuilt/
 !prebuilt/*.bit
 !prebuilt/.gitkeep
+!reports/
+!reports/*.rpt
+!reports/.gitkeep
 
 # ==========================================
 # Vivado: Temporales, logs y bases de datos
