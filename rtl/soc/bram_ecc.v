@@ -40,7 +40,7 @@ module bram_ecc #(
       .rdaddrecc(rdaddrecc)
   );
 `else
-  reg [38:0] mem[0:WORDS-1];
+  (* ram_style = "block" *) reg [38:0] mem[0:WORDS-1];
 
   reg [38:0] raw_dout;
   reg [ADDR_WIDTH-1:0] reg_rdaddrecc;
